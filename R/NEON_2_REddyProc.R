@@ -1,33 +1,36 @@
 # package_NEON_for_REddyProc.R
-# rich fiorella 191127
 
-# remove existing data?
-rm(list=ls())
 
-# load packages
-library(rhdf5)
-library(neonUtilities)
-library(REddyProc)
-library(xts)
-library(lubridate)
-library(tidyverse)
+extract_NEON_fluxes_REddyProc <- function(site,year=9999,flux.path,met.path,
+                                          nee.max,nee.min,lh.max,lh.min) {
+  
+  # list required packages
+  require(rhdf5)
+  require(neonUtilities)
+  require(xts)
+  require(lubridate)
+  require(tidyverse)
+  
+  # stack flux data.
+  fluxes <- stackEddy(paste0(flux.path,"/",site,"/"),level="dp04")
+  
+  fluxes.flat <- fluxes[[site]] # flatten list structure.
 
-# need to gather and preprocess data.
-fluxes <- stackEddy("~/Dropbox/NEON/DP4_00200_001/NOGP/",level="dp04")
+  # extract required variables.
+  fluxes.reduced <- fluxes.flat %>%
+    select(timeBgn,timeEnd, # time variables
+           data.fluxCo2.nsae.flux,data.fluxCo2.stor.flux,data.fluxCo2.turb.flux, # CO2 fluxes
+           data.fluxH2o.nsae.flux,data.fluxH2o.stor.flux,data.fluxH2o.turb.flux, # H2O fluxes,
+           data.fluxTemp.nsae.flux,data.fluxTemp.nsae.flux,data.fluxTemp.turb.flux, # Temp fluxes,
+           data.fluxMome.turb.veloFric) # u*
+  
+  # convert "NEON" time to POSIXct
+  fluxes.reduced$timeBgn <- as.POSIXct(fluxes.reduced$timeBgn,format="%Y-%m-%dT%H:%M:%S.%OSZ",tz="UTC")
+  
+  # filter out insane values?
+  # nee[nee>40] <- nee[nee< -40] <- NA
 
-nee <- fluxes$NOGP$data.fluxCo2.nsae.flux
-lhf <- fluxes$NOGP$data.fluxH2o.nsae.flux
-shf <- fluxes$NOGP$data.fluxTemp.nsae.flux
-ustar <- fluxes$NOGP$data.fluxMome.turb.veloFric
-flux.time <- fluxes$NOGP$timeBgn
-
-flux.time <- as.POSIXct(flux.time,format="%Y-%m-%dT%H:%M:%S.%OSZ",tz="UTC")
-
-rm(fluxes)
-
-# filter out insane values.
-nee[nee>40] <- nee[nee< -40] <- NA
-
+}
 # create xts 
 flux.vars <- data.frame(nee,lhf,shf,ustar)
 flux.xts <- xts(flux.vars,order.by=flux.time)
@@ -83,7 +86,6 @@ dummy.xts <- xts(dummy.data,order.by=dummy.ts)
 all.data <- merge(dummy.xts,Rg.xts,Rh.xts,Ta.xts,flux.xts)
 
 # cut to min/max of flux data.
-all.data <- all.data["2018-01-01/2019-12-31"]
 
 # convert to MPI required format.
 out.data <- coredata(all.data)
@@ -105,70 +107,5 @@ data.out <- do.call(rbind,list(head1,head2,data.out))
 
 write.table(data.out,"~/Desktop/NOGP_forREddyProc.txt",sep="\t",col.names=FALSE,row.names=FALSE,quote=FALSE)
 
-#------------------------------------------------------------
-#------------------------------------------------------------
-# now go through REddyProc
 
-rm(list=ls())
-
-EddyData <- fLoadTXTIntoDataframe("NOGP_forREddyProc.txt",Dir="~/Desktop")
-EddyData <- filterLongRuns(EddyData,"NEE")
-# convert VPD to numeric.
-EddyData$VPD <- as.numeric(EddyData$VPD)
-
-#+++ Add time stamp in POSIX time format
-EddyDataWithPosix <- fConvertTimeToPosix(
-  EddyData, 'YDH',Year = 'Year',Day = 'DoY', Hour = 'Hour') %>% 
-  filterLongRuns("NEE")
-#+++ Initalize R5 reference class sEddyProc for post-processing of eddy data
-#+++ with the variables needed for post-processing later
-EProc <- sEddyProc$new(
-  'US-Wref', EddyDataWithPosix, c('NEE','Rg','Tair','VPD', 'Ustar'))
-
-EProc$sPlotFingerprintY('NEE', Year = 2019)
-
-EProc$sEstimateUstarScenarios(
-  nSample = 100L, probs = c(0.05, 0.5, 0.95))
-
-EProc$sGetUstarScenarios()
-
-EProc$sMDSGapFillUStarScens('NEE')
-
-#EProc$sPlotFingerprintY('NEE_U50_f', Year = 2018)
-
-# partition (nighttime method.)
-EProc$sSetLocationInfo(LatDeg = 46.77, LongDeg = -100.92, TimeZoneHour = 0)
-EProc$sMDSGapFill('Tair',FillAll = FALSE, minNWarnRunLength = NA)
-EProc$sMDSGapFill('VPD', FillAll = FALSE, minNWarnRunLength = NA)
-
-EProc$sMRFluxPartitionUStarScens()
-
-# plot GPP and Reco
-yr.to.print <- 2018
-
-pdf("NOGP_2018.pdf",width=12,height=8)
-par(mfrow=c(1,3))
-par(mar=c(1,1,0,0),oma=c(1,1,1,1))
-EProc$sPlotFingerprintY('NEE_U50_f', Year = yr.to.print)
-EProc$sPlotFingerprintY('GPP_U50_f', Year = yr.to.print)
-EProc$sPlotFingerprintY('Reco_U50', Year = yr.to.print)
-dev.off()
-
-yr2.to.print <- 2019
-
-pdf("NOGP_2019.pdf",width=12,height=8)
-par(mfrow=c(1,3))
-par(mar=c(1,1,0,0),oma=c(1,1,1,1))
-EProc$sPlotFingerprintY('NEE_U50_f', Year = yr2.to.print)
-EProc$sPlotFingerprintY('GPP_U50_f', Year = yr2.to.print)
-EProc$sPlotFingerprintY('Reco_U50', Year = yr2.to.print)
-dev.off()
-
-# pdf("testlegends.pdf",width=12,height=3)
-# par(mfrow=c(1,3))
-# par(mar=c(0.1,0.1,0.1,0.1),oma=c(0.1,0.1,0.1,0.1))
-# EProc$sPlotFingerprintY('NEE_U50_f', Year = yr.to.print, onlyLegend = TRUE)
-# EProc$sPlotFingerprintY('GPP_U50_f', Year = yr.to.print, onlyLegend = TRUE)
-# EProc$sPlotFingerprintY('Reco_U50', Year = yr.to.print, onlyLegend = TRUE)
-# dev.off()
 

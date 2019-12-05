@@ -1,7 +1,10 @@
 Package: UUfluxproc
+Type: Package
+Version: 0.1.0
 Title: Process flux data into MPI format, perform QAQC, make diagnostic plots
 Authors@R: person("Rich","Fiorella",email = "rich.fiorella@utah.edu", role = c("aut","cre"))
 Depends: R (>= 3.4.0)
+Encoding: UTF-8
 Imports:
 	tidyverse,
 	xts,
@@ -9,3 +12,4 @@ Imports:
 	lubridate
 Suggests: 
 	rhdf5
+RoxygenNote: 6.1.1
