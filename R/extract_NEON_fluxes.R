@@ -17,8 +17,7 @@
 #'
 #' @examples
 extract_NEON_fluxes <- function(neon.site,year=9999,flux.path="~/Dropbox/NEON/DP4_00200_001",met.path,expanded=FALSE,
-                                          median.filter=TRUE,write.to.file=FALSE,out.path,
-                                          nee.max,nee.min,lh.max,lh.min) {
+                                          median.filter=TRUE,filt.width=3,write.to.file=FALSE,out.path) {
   
   # list required packages
   require(rhdf5)
@@ -54,21 +53,12 @@ extract_NEON_fluxes <- function(neon.site,year=9999,flux.path="~/Dropbox/NEON/DP
   # convert "NEON" time to POSIXct
   fluxes.reduced$timeBgn <- as.POSIXct(fluxes.reduced$timeBgn,format="%Y-%m-%dT%H:%M:%S.%OSZ",tz="UTC")
   fluxes.reduced$timeEnd <- as.POSIXct(fluxes.reduced$timeEnd,format="%Y-%m-%dT%H:%M:%S.%OSZ",tz="UTC")
-  
-  # filter out insane values?
-  # nee[nee>40] <- nee[nee< -40] <- NA
 
   # convert fluxes to xts. 
   fluxes.notime <- fluxes.reduced %>%
     select(-timeBgn,timeEnd)
   
   flux.xts <- as.xts(fluxes.notime,order.by=fluxes.reduced$timeBgn)
-  
-  # perform median filtering, if enabled.
-  if (median.filter == TRUE) {
-  #  flux.xts <- rollapply(flux.xts,7,median,na.rm=TRUE)
-    stop("Coded to stop currently...need to consider more carefully which variables to apply to.")
-  }
   
   #------------------------------------------------------------
   # load met data.
@@ -229,8 +219,52 @@ extract_NEON_fluxes <- function(neon.site,year=9999,flux.path="~/Dropbox/NEON/DP
   
   # return a data frame.
   names(data.out) <- head1
-  return(data.out)
+  
+  if (median.filter == TRUE) {
     
+    #---------------- Filter NEE ----------------
+    # remove points that are 5 sigma away from mean?
+    NEE.mu <- mean(data.out$NEE,na.rm=TRUE)
+    NEE.sd <- sd(data.out$NEE,na.rm=TRUE)
+    
+    NEE.oor <- (data.out$NEE < NEE.mu-4*NEE.sd) | (data.out$NEE > NEE.mu+4*NEE.sd)
+    
+    # set out of range values to missing:
+    data.out$NEE[NEE.oor == TRUE] <- NA 
+  
+    # just filter NEE
+    data.out$NEE <- rollapply(data.out$NEE,filt.width,median,fill=NA)
+    
+    #---------------- Filter LH -----------------
+    # remove points that are 5 sigma away from mean?
+    LH.mu <- mean(data.out$LH,na.rm=TRUE)
+    LH.sd <- sd(data.out$LH,na.rm=TRUE)
+    
+    LH.oor <- (data.out$LH < LH.mu-4*LH.sd) | (data.out$LH > LH.mu+4*LH.sd)
+    
+    # set out of range values to missing:
+    data.out$LH[LH.oor == TRUE] <- NA
+
+    # just filter LH    
+    data.out$LH <- rollapply(data.out$LH,filt.width,median,fill=NA)
+    
+    #---------------- Filter H ------------------
+    # remove points that are 5 sigma away from mean?
+    H.mu <- mean(data.out$H,na.rm=TRUE)
+    H.sd <- sd(data.out$H,na.rm=TRUE)
+    
+    H.oor <- (data.out$H < H.mu-4*H.sd) | (data.out$H > H.mu+4*H.sd)
+    
+    # set out of range values to missing:
+    data.out$H[H.oor == TRUE] <- NA
+    
+    # just filter H    
+    data.out$H <- rollapply(data.out$H,filt.width,median,fill=NA)
+    
+  }
+ 
+  return(data.out)
+  
   #------------------------------------------------------------
   # write out data file if requested.
   if (write.to.file == TRUE & expanded == FALSE) {
