@@ -33,7 +33,7 @@ extract_NEON_fluxes <- function(neon.site,
   require(tidyverse)
   
   # stack flux data.
-  fluxes <- stackEddy(paste0(flux.path,"/",neon.site,"/"),level="dp04")
+  fluxes <- stackEddy(paste0(flux.path,"/",neon.site),level="dp04")
   
   fluxes.flat <- fluxes[[neon.site]] # flatten list structure.
 
@@ -178,8 +178,8 @@ extract_NEON_fluxes <- function(neon.site,
   names(Rh.xts) <- "Rh"
   names(Ta.xts) <- "Ta"
 
-  minTime <- min(c(min(index(Rg.xts)),min(index(Rh.xts)),min(index(Ta.xts)),min(index(flux.xts))))
-  maxTime <- max(c(max(index(Rg.xts)),max(index(Rh.xts)),max(index(Ta.xts)),max(index(flux.xts))))
+  minTime <- as.POSIXct(min(c(min(index(Rg.xts)),min(index(Rh.xts)),min(index(Ta.xts)),min(index(flux.xts)))),origin="1970-01-01")
+  maxTime <- as.POSIXct(max(c(max(index(Rg.xts)),max(index(Rh.xts)),max(index(Ta.xts)),max(index(flux.xts)))),origin="1970-01-01")
   print(c(minTime,maxTime,class(minTime),class(maxTime)))
   
   dummy.ts <- seq.POSIXt(minTime,maxTime,by=1800)
