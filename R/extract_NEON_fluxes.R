@@ -180,6 +180,7 @@ extract_NEON_fluxes <- function(neon.site,
 
   minTime <- min(c(min(index(Rg.xts)),min(index(Rh.xts)),min(index(Ta.xts)),min(index(flux.xts))))
   maxTime <- max(c(max(index(Rg.xts)),max(index(Rh.xts)),max(index(Ta.xts)),max(index(flux.xts))))
+  print(c(minTime,maxTime,class(minTime),class(maxTime)))
   
   dummy.ts <- seq.POSIXt(minTime,maxTime,by=1800)
   dummy.data <- rep(NA,length(dummy.ts))
