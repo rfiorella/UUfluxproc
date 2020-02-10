@@ -2,7 +2,7 @@
 % Please edit documentation in R/extract_NEON_fluxes.R
 \name{extract_NEON_fluxes}
 \alias{extract_NEON_fluxes}
-\title{Title}
+\title{extract_NEON_fluxes}
 \usage{
 extract_NEON_fluxes(
   neon.site,
@@ -11,40 +11,36 @@ extract_NEON_fluxes(
   met.path,
   expanded = FALSE,
   median.filter = TRUE,
+  filt.width = 3,
+  fix.tz = FALSE,
   write.to.file = FALSE,
-  out.path,
-  nee.max,
-  nee.min,
-  lh.max,
-  lh.min
+  out.path
 )
 }
 \arguments{
-\item{neon.site}{}
+\item{neon.site}{Four letter code indicating NEON site.}
 
-\item{year}{}
+\item{year}{Which year to process? If not specified, process all.}
 
-\item{flux.path}{}
+\item{flux.path}{Specify path to flux data you wish to process.}
 
-\item{met.path}{}
+\item{met.path}{Specify path to meteorological data (if NULL - download from NEON API)}
 
 \item{expanded}{}
 
-\item{median.filter}{}
+\item{median.filter}{Filter half-hourly data using the Brock 86 median filter.}
 
-\item{write.to.file}{}
+\item{filt.width}{Width of median filter. Old implementation.}
 
-\item{nee.max}{}
+\item{fix.tz}{Convert from UTC to local time zone?}
 
-\item{nee.min}{}
+\item{write.to.file}{Write to csv file?}
 
-\item{lh.max}{}
-
-\item{lh.min}{}
+\item{out.path}{If saving a file of results, where should it be saved?}
 }
 \value{
 
 }
 \description{
-Title
+extract_NEON_fluxes
 }

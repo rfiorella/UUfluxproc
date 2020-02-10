@@ -2,18 +2,18 @@
 #'
 #' @param neon.site Four letter code indicating NEON site.
 #' @param year Which year to process? If not specified, process all. 
-#' @param flux.path 
-#' @param met.path 
+#' @param flux.path Specify path to flux data you wish to process.
+#' @param met.path  Specify path to meteorological data (if NULL - download from NEON API)
 #' @param expanded 
-#' @param median.filter 
-#' @param filt.width 
-#' @param out.path 
-#' @param write.to.file 
+#' @param median.filter Filter half-hourly data using the Brock 86 median filter.
+#' @param filt.width Width of median filter. Old implementation.
+#' @param out.path If saving a file of results, where should it be saved?
+#' @param write.to.file Write to csv file?
+#' @param fix.tz Convert from UTC to local time zone?
 #'
 #' @return
 #' @export
 #'
-#' @examples
 extract_NEON_fluxes <- function(neon.site,
                                 year=9999,
                                 flux.path="~/Dropbox/NEON/DP4_00200_001",
