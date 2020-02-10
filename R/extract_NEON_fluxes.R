@@ -1,23 +1,29 @@
-#' Title
+#' extract_NEON_fluxes
 #'
-#' @param neon.site 
-#' @param year 
+#' @param neon.site Four letter code indicating NEON site.
+#' @param year Which year to process? If not specified, process all. 
 #' @param flux.path 
 #' @param met.path 
 #' @param expanded 
 #' @param median.filter 
+#' @param filt.width 
+#' @param out.path 
 #' @param write.to.file 
-#' @param nee.max 
-#' @param nee.min 
-#' @param lh.max 
-#' @param lh.min 
 #'
 #' @return
 #' @export
 #'
 #' @examples
-extract_NEON_fluxes <- function(neon.site,year=9999,flux.path="~/Dropbox/NEON/DP4_00200_001",met.path,expanded=FALSE,
-                                          median.filter=TRUE,filt.width=3,write.to.file=FALSE,out.path) {
+extract_NEON_fluxes <- function(neon.site,
+                                year=9999,
+                                flux.path="~/Dropbox/NEON/DP4_00200_001",
+                                met.path,
+                                expanded=FALSE,
+                                median.filter=TRUE,
+                                filt.width=3,
+                                fix.tz=FALSE,
+                                write.to.file=FALSE,
+                                out.path) {
   
   # list required packages
   require(rhdf5)
@@ -60,6 +66,16 @@ extract_NEON_fluxes <- function(neon.site,year=9999,flux.path="~/Dropbox/NEON/DP
   
   flux.xts <- as.xts(fluxes.notime,order.by=fluxes.reduced$timeBgn)
   
+  # get lat/lon and timezone of station.
+  slist <- list.files(path=paste0(flux.path,"/",neon.site,"/"),pattern=".h5",
+                      full.names=TRUE,recursive=TRUE)
+  print(slist)
+  
+  attrs <- h5readAttributes(slist[[1]],neon.site)
+  
+  lat <- as.numeric(attrs$LatTow)
+  lon <- as.numeric(attrs$LonTow)
+  tzone <- as.character(attrs$ZoneTime)
   #------------------------------------------------------------
   # load met data.
   #------------------------------------------------------------
@@ -186,7 +202,17 @@ extract_NEON_fluxes <- function(neon.site,year=9999,flux.path="~/Dropbox/NEON/DP
     all.data <- all.data[paste0(start.mon,"/",end.mon)]  
   }
   
-  #------------------------------------------------------------
+  if (tzone == "PST") {
+    indexTZ(all.data) <- "Etc/GMT+8"  
+  } else if (tzone == "MST") {
+    indexTZ(all.data) <- "Etc/GMT+7"
+  } else if (tzone == "CST") {
+    indexTZ(all.data) <- "Etc/GMT+6" 
+  } else if (tzone == "EST") {
+    indexTZ(all.data) <- "Etc/GMT+5"
+  }
+  
+   #------------------------------------------------------------
   # load more data if we're going for the expanded package.
   # convert to MPI required format.
   out.data <- coredata(all.data)
@@ -223,18 +249,22 @@ extract_NEON_fluxes <- function(neon.site,year=9999,flux.path="~/Dropbox/NEON/DP
   if (median.filter == TRUE) {
     
     #---------------- Filter NEE ----------------
+    # put in median deviation filter from Brock 86 / Starkenburg 2016.
+    
+    NEE.filt <- rollapply(data.out$NEE,7,median,na.rm=TRUE,fill=NA)
+    NEE.logi <- abs(data.out$NEE - NEE.filt) > 10
+    
+    data.out$NEE[NEE.logi == TRUE] <- NA
+    
     # remove points that are 5 sigma away from mean?
     NEE.mu <- mean(data.out$NEE,na.rm=TRUE)
     NEE.sd <- sd(data.out$NEE,na.rm=TRUE)
-    
+
     NEE.oor <- (data.out$NEE < NEE.mu-4*NEE.sd) | (data.out$NEE > NEE.mu+4*NEE.sd)
-    
+
     # set out of range values to missing:
-    data.out$NEE[NEE.oor == TRUE] <- NA 
-  
-    # just filter NEE
-    data.out$NEE <- rollapply(data.out$NEE,filt.width,median,fill=NA)
-    
+    data.out$NEE[NEE.oor == TRUE] <- NA
+
     #---------------- Filter LH -----------------
     # remove points that are 5 sigma away from mean?
     LH.mu <- mean(data.out$LH,na.rm=TRUE)
@@ -263,8 +293,10 @@ extract_NEON_fluxes <- function(neon.site,year=9999,flux.path="~/Dropbox/NEON/DP
     
   }
  
-  return(data.out)
-  
+  attr(data.out,"lat") <- lat 
+  attr(data.out,"lon") <- lon 
+  attr(data.out,"tzone") <- tzone
+
   #------------------------------------------------------------
   # write out data file if requested.
   if (write.to.file == TRUE & expanded == FALSE) {
@@ -277,4 +309,9 @@ extract_NEON_fluxes <- function(neon.site,year=9999,flux.path="~/Dropbox/NEON/DP
                   sep="\t",col.names=FALSE,row.names=FALSE,quote=FALSE)
     }
   }
-}
+    
+  return(data.out)
+}  
+  
+  
+  
