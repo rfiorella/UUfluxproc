@@ -24,8 +24,11 @@ plot_met_terms <- function(data) {
   }
   
   # change time to something posixct can handle.
-  ddoy <- data$DoY + data$Hour/24
-  data$Time <- as.POSIXct(paste0(data$Year,"-",ddoy),format="%Y-%j")
+  time.origin <- as.POSIXct(paste(data$Year[1],data$DoY[1]+data$Hour[1]/24),format="%Y %j",tz=attr(data,"tzone"))
+
+  data$Time <- time.origin + (data$DoY-1)*86400 + data$Hour*3600
+
+  print(data$Time)
   
   # set up ggplot.
   p1 <- ggplot(data=data,aes(x=Time,y=Tair)) +
