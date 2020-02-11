@@ -180,7 +180,6 @@ extract_NEON_fluxes <- function(neon.site,
 
   minTime <- as.POSIXct(min(c(min(index(Rg.xts)),min(index(Rh.xts)),min(index(Ta.xts)),min(index(flux.xts)))),origin="1970-01-01")
   maxTime <- as.POSIXct(max(c(max(index(Rg.xts)),max(index(Rh.xts)),max(index(Ta.xts)),max(index(flux.xts)))),origin="1970-01-01")
-  print(c(minTime,maxTime,class(minTime),class(maxTime)))
   
   dummy.ts <- seq.POSIXt(minTime,maxTime,by=1800)
   dummy.data <- rep(NA,length(dummy.ts))
@@ -189,9 +188,9 @@ extract_NEON_fluxes <- function(neon.site,
   
   # create bound xts
   if (expanded == TRUE) {
-    all.data <- merge(dummy.xts,Rg.xts,Rh.xts,Ta.xts,PAR.xts,flux.xts)
+    all.data <- merge.xts(dummy.xts,Rg.xts,Rh.xts,Ta.xts,PAR.xts,flux.xts)
   } else {
-    all.data <- merge(dummy.xts,Rg.xts,Rh.xts,Ta.xts,flux.xts)
+    all.data <- merge.xts(dummy.xts,Rg.xts,Rh.xts,Ta.xts,flux.xts)
   }
   
   # calculate vpd from Tair and Rh
