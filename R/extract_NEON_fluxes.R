@@ -111,35 +111,29 @@ extract_NEON_fluxes <- function(neon.site,
   Rh <- Rh.tmp$RH_30min %>%
     filter(as.numeric(horizontalPosition) == 0) %>%
     filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
-    select(as.numeric(RHMean),startDateTime) 
+    select(RHMean,startDateTime) 
   Ta <- Ta.tmp$TAAT_30min %>% 
     filter(as.numeric(horizontalPosition) == 0) %>% 
     filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
-    select(as.numeric(tempTripleMean),startDateTime)
+    select(tempTripleMean,startDateTime)
   
   
   if (expanded == TRUE) {
     Rg <- Rg.tmp$SLRNR_30min %>%
       filter(as.numeric(horizontalPosition) == 0) %>%
       filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
-      select(as.numeric(inSWMean),
-             as.numeric(outSWMean),
-             as.numeric(inLWMean),
-             as.numeric(outLWMean),
-             startDateTime) 
+      select(inSWMean,outSWMean,inLWMean,outLWMean,startDateTime) 
     
     PAR <- PAR.tmp$PARPAR_30min %>%
       filter(as.numeric(horizontalPosition) == 0) %>%
       filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
-      select(as.numeric(PARMean),
-             startDateTime)  
+      select(PARMean,startDateTime)  
     
   } else {
     Rg <- Rg.tmp$SLRNR_30min %>%
       filter(as.numeric(horizontalPosition) == 0) %>%
       filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
-      select(as.numeric(inSWMean),
-             startDateTime) 
+      select(inSWMean,startDateTime) 
   }
 
   names(Rh) <- c("Rh","time")
