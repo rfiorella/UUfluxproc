@@ -28,10 +28,11 @@ plot_nee_vs_par <- function(data,nee.thres=50) {
   data$Time <- as.POSIXct(paste0(data$Year,"-",ddoy),format="%Y-%j")
   
   # set up ggplot.
-  p1 <- ggplot(data=data,aes(x=PAR,y=NEE)) +
+  p1 <- ggplot(data=data,aes(x=PAR,y=NEE,col=DoY)) +
     geom_point(alpha = .1) + 
     theme_bw() +
     theme(legend.position = "bottom") +
+    scale_colour_viridis_c() +
     scale_y_continuous(limits=c(-nee.thres,nee.thres))
   
   print(p1)
