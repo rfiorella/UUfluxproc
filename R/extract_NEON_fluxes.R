@@ -109,31 +109,37 @@ extract_NEON_fluxes <- function(neon.site,
   
   # pull out met variables.
   Rh <- Rh.tmp$RH_30min %>%
-    filter(horizontalPosition == 0) %>%
-    filter(verticalPosition == max(verticalPosition)) %>%
-    select(RHMean,startDateTime) 
+    filter(as.numeric(horizontalPosition) == 0) %>%
+    filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
+    select(as.numeric(RHMean),startDateTime) 
   Ta <- Ta.tmp$TAAT_30min %>% 
-    filter(horizontalPosition == 0) %>% 
-    filter(verticalPosition == max(verticalPosition)) %>%
-    select(tempTripleMean,startDateTime)
+    filter(as.numeric(horizontalPosition) == 0) %>% 
+    filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
+    select(as.numeric(tempTripleMean),startDateTime)
   
   
   if (expanded == TRUE) {
     Rg <- Rg.tmp$SLRNR_30min %>%
-      filter(horizontalPosition == 0) %>%
-      filter(verticalPosition == max(verticalPosition)) %>%
-      select(inSWMean,outSWMean,inLWMean,outLWMean,startDateTime) 
+      filter(as.numeric(horizontalPosition) == 0) %>%
+      filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
+      select(as.numeric(inSWMean),
+             as.numeric(outSWMean),
+             as.numeric(inLWMean),
+             as.numeric(outLWMean),
+             startDateTime) 
     
     PAR <- PAR.tmp$PARPAR_30min %>%
-      filter(horizontalPosition == 0) %>%
-      filter(verticalPosition == max(verticalPosition)) %>%
-      select(PARMean,startDateTime)  
+      filter(as.numeric(horizontalPosition) == 0) %>%
+      filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
+      select(as.numeric(PARMean),
+             startDateTime)  
     
   } else {
     Rg <- Rg.tmp$SLRNR_30min %>%
-      filter(horizontalPosition == 0) %>%
-      filter(verticalPosition == max(verticalPosition)) %>%
-      select(inSWMean,startDateTime) 
+      filter(as.numeric(horizontalPosition) == 0) %>%
+      filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
+      select(as.numeric(inSWMean),
+             startDateTime) 
   }
 
   names(Rh) <- c("Rh","time")
