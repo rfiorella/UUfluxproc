@@ -203,13 +203,13 @@ extract_NEON_fluxes <- function(neon.site,
   }
   
   if (tzone == "PST") {
-    indexTZ(all.data) <- "Etc/GMT+8"  
+    tzone(all.data) <- "Etc/GMT+8"  
   } else if (tzone == "MST") {
-    indexTZ(all.data) <- "Etc/GMT+7"
+    tzone(all.data) <- "Etc/GMT+7"
   } else if (tzone == "CST") {
-    indexTZ(all.data) <- "Etc/GMT+6" 
+    tzone(all.data) <- "Etc/GMT+6" 
   } else if (tzone == "EST") {
-    indexTZ(all.data) <- "Etc/GMT+5"
+    tzone(all.data) <- "Etc/GMT+5"
   }
   
    #------------------------------------------------------------
