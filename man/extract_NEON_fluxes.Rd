@@ -11,8 +11,6 @@ extract_NEON_fluxes(
   met.path,
   expanded = FALSE,
   median.filter = TRUE,
-  filt.width = 3,
-  fix.tz = FALSE,
   write.to.file = FALSE,
   out.path
 )
@@ -26,21 +24,36 @@ extract_NEON_fluxes(
 
 \item{met.path}{Specify path to meteorological data (if NULL - download from NEON API)}
 
-\item{expanded}{}
+\item{expanded}{Return only the "standard" variables, or an expanded set? Expanded set includes
+individual components of SW/LW fluxes as well as PAR.}
 
 \item{median.filter}{Filter half-hourly data using the Brock 86 median filter.}
-
-\item{filt.width}{Width of median filter. Old implementation.}
-
-\item{fix.tz}{Convert from UTC to local time zone?}
 
 \item{write.to.file}{Write to csv file?}
 
 \item{out.path}{If saving a file of results, where should it be saved?}
 }
 \value{
-
+A \code{data.frame} containing merged eddy covariance and meteorological variables 
+        on a common time array. If \code{expanded = FALSE}, output will be exactly the input
+        \code{data.frame}. required by \code{REddyProc}. If \code{expanded = TRUE}, 
+        output \code{data.frame} includes: a) storage and turblent terms of net flux, b) expanded
+        radiation variables, including outgoing SW, incoming and outgoing LW, and PAR.
 }
 \description{
-extract_NEON_fluxes
+Extracts NEON eddy covariance data from HDF5 files, merges with relevant meteorolgical data,
+and returns a \code{data.frame} for a specified time period. A specific year can be requested,
+though the default is to return the entire period of record for that site. Current setup 
+assumes that you have a local copy of eddy covariance files (DP4.00200.001) for the site of interest.
+Meterological data *can* also be local, and a location specified by the \code{met.path} argument; if
+no value is provided to \code{met.path}, meteorological data for the site for the requested period
+will be retrieved from the NEON API. Clear spikes are removed using a moving "deviation from median" 
+filter, described by Brock 1986 and shown to perform well in Starkenburg et al. 2016.
+Default options return a \code{data.frame} that is immediately useable for flux partitioning using 
+\code{REddyProc}, though users are encouraged to verify that the despiking worked appropriately for
+their site. An option to save the returned \code{data.frame}, set by the arguments 
+\code{write.to.file == TRUE} and \code{out.path}, is also available.
+}
+\author{
+Rich Fiorella \email{rich.fiorella@utah.edu}
 }
