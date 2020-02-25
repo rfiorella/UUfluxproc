@@ -54,6 +54,19 @@ Default options return a \code{data.frame} that is immediately useable for flux 
 their site. An option to save the returned \code{data.frame}, set by the arguments 
 \code{write.to.file == TRUE} and \code{out.path}, is also available.
 }
+\section{Notes on median deviation filter}{
+
+This function by default applies a "median absolute deviation" filter to the net flux variables
+of sensible heat, latent heat, and net ecosystem exchange. The filter is applied to 
+a moving window of data, currently 7 points, and each point in that window is compared to the median
+of the window. If it differs by the median by a certain threshold, the data point is discarded. Due 
+to the width of the filter, only spikes smaller than 3 points can be removed. As a result, there is 
+a second weak filter that removes points that are more than 4sigma from the mean. The threshold values
+in this filter are 10 umolCO2/m2/s for NEE, and 100 W/m2 for LH and H. All of these should be considered
+provisional, and different thresholds may be suggested. If you need different thresholds, or suggest they
+should be changed globally, contact me.
+}
+
 \author{
 Rich Fiorella \email{rich.fiorella@utah.edu}
 }

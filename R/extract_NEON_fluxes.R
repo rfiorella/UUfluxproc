@@ -12,6 +12,17 @@
 #' \code{REddyProc}, though users are encouraged to verify that the despiking worked appropriately for
 #' their site. An option to save the returned \code{data.frame}, set by the arguments 
 #' \code{write.to.file == TRUE} and \code{out.path}, is also available.
+#' 
+#' @section Notes on median deviation filter:
+#' This function by default applies a "median absolute deviation" filter to the net flux variables
+#' of sensible heat, latent heat, and net ecosystem exchange. The filter is applied to 
+#' a moving window of data, currently 7 points, and each point in that window is compared to the median
+#' of the window. If it differs by the median by a certain threshold, the data point is discarded. Due 
+#' to the width of the filter, only spikes smaller than 3 points can be removed. As a result, there is 
+#' a second weak filter that removes points that are more than 4sigma from the mean. The threshold values
+#' in this filter are 10 umolCO2/m2/s for NEE, and 100 W/m2 for LH and H. All of these should be considered
+#' provisional, and different thresholds may be suggested. If you need different thresholds, or suggest they
+#' should be changed globally, contact me.
 #'
 #' @author Rich Fiorella \email{rich.fiorella@@utah.edu}
 #' 
@@ -282,6 +293,13 @@ extract_NEON_fluxes <- function(neon.site,
     data.out$NEE[NEE.oor == TRUE] <- NA
 
     #---------------- Filter LH -----------------
+    # median deviation filter of Brock 86 / Starkenburg 16
+    
+    LH.filt <- zoo::rollapply(data.out$LH,7,median,na.rm=TRUE,fill=NA)
+    LH.logi <- abs(data.out$LH - LH.filt) > 100 # this threshold has not been checked!
+    
+    data.out$LH[LH.logi == TRUE] <- NA # replace with missing
+    
     # remove points that are 4 sigma away from mean?
     LH.mu <- mean(data.out$LH,na.rm=TRUE)
     LH.sd <- sd(data.out$LH,na.rm=TRUE)
@@ -290,11 +308,15 @@ extract_NEON_fluxes <- function(neon.site,
     
     # set out of range values to missing:
     data.out$LH[LH.oor == TRUE] <- NA
-
-    # just filter LH    
-    data.out$LH <- rollapply(data.out$LH,filt.width,median,fill=NA)
     
     #---------------- Filter H ------------------
+    # median deviation filter of Brock 86 / Starkenburg 16
+    
+    H.filt <- zoo::rollapply(data.out$H,7,median,na.rm=TRUE,fill=NA)
+    H.logi <- abs(data.out$H - H.filt) > 100 # this threshold has not been checked!
+    
+    data.out$LH[H.logi == TRUE] <- NA # replace with missing
+    
     # remove points that are 4 sigma away from mean?
     H.mu <- mean(data.out$H,na.rm=TRUE)
     H.sd <- sd(data.out$H,na.rm=TRUE)
@@ -303,10 +325,6 @@ extract_NEON_fluxes <- function(neon.site,
     
     # set out of range values to missing:
     data.out$H[H.oor == TRUE] <- NA
-    
-    # just filter H    
-    data.out$H <- rollapply(data.out$H,filt.width,median,fill=NA)
-    
   }
  
   attr(data.out,"lat") <- lat 
