@@ -6,7 +6,8 @@
 #' assumes that you have a local copy of eddy covariance files (DP4.00200.001) for the site of interest.
 #' Meterological data *can* also be local, and a location specified by the \code{met.path} argument; if
 #' no value is provided to \code{met.path}, meteorological data for the site for the requested period
-#' will be retrieved from the NEON API. Clear spikes are removed using a moving "deviation from median" 
+#' will be retrieved from the NEON API. Calculates VPD from NEON-provided temp and RH.
+#' Clear spikes are removed using a moving "deviation from median" 
 #' filter, described by Brock 1986 and shown to perform well in Starkenburg et al. 2016.
 #' Default options return a \code{data.frame} that is immediately useable for flux partitioning using 
 #' \code{REddyProc}, though users are encouraged to verify that the despiking worked appropriately for
@@ -59,19 +60,35 @@ extract_NEON_fluxes <- function(neon.site,
   require(lubridate)
   require(tidyverse)
   
+  #----------------------------------
+  # validate neon.site
+  
+  sites <- c("BONA","CLBJ","CPER","GUAN","HARV","KONZ",
+             "NIWO","ONAQ","ORNL","OSBS","PUUM","SCBI",
+             "SJER","SRER","TALL","TOOL","UNDE","WOOD",
+             "WREF","YELL","ABBY","BARR","BART","BLAN",
+             "DELA","DSNY","GRSM","HEAL","JERC","JORN",
+             "KONA","LAJA","LENO","MLBS","MOAB","NOGP",
+             "OAES","RMNP","SERC","SOAP","STEI","STER",
+             "TEAK","TREE","UKFS","DCFS","DEJU")
+  
+  if (!(neon.site %in% sites)) {
+    stop("Check neon.site argument - not a current 4-letter NEON code for a terrestrial site.")
+  }
+  
   # stack flux data.
-  fluxes <- stackEddy(paste0(flux.path,"/",neon.site),level="dp04")
+  fluxes <- neonUtilities::stackEddy(paste0(flux.path,"/",neon.site),level="dp04")
   
   fluxes.flat <- fluxes[[neon.site]] # flatten list structure.
 
   # extract required variables.
   fluxes.reduced <- fluxes.flat %>%
-    select(timeBgn,timeEnd, # time variables
+    dplyr::select(timeBgn,timeEnd, # time variables
            data.fluxCo2.nsae.flux,data.fluxCo2.stor.flux,data.fluxCo2.turb.flux, # CO2 fluxes
            data.fluxH2o.nsae.flux,data.fluxH2o.stor.flux,data.fluxH2o.turb.flux, # H2O fluxes,
            data.fluxTemp.nsae.flux,data.fluxTemp.stor.flux,data.fluxTemp.turb.flux, # Temp fluxes,
            data.fluxMome.turb.veloFric) %>% # u*
-    rename(nee=data.fluxCo2.nsae.flux,lhf=data.fluxH2o.nsae.flux,
+    dplyr::rename(nee=data.fluxCo2.nsae.flux,lhf=data.fluxH2o.nsae.flux,
            shf=data.fluxTemp.nsae.flux,ustar=data.fluxMome.turb.veloFric,
            Fc=data.fluxCo2.turb.flux,Fw=data.fluxH2o.turb.flux,
            Ft=data.fluxTemp.turb.flux,Sc=data.fluxCo2.stor.flux,
@@ -80,7 +97,7 @@ extract_NEON_fluxes <- function(neon.site,
   # cut down further if not expanded
   if (!expanded) {
     fluxes.reduced <- fluxes.reduced %>%
-      select(timeBgn,timeEnd,nee,lhf,shf,ustar)
+      dplyr::select(timeBgn,timeEnd,nee,lhf,shf,ustar)
   }
   
   # convert "NEON" time to POSIXct
@@ -89,14 +106,13 @@ extract_NEON_fluxes <- function(neon.site,
 
   # convert fluxes to xts. 
   fluxes.notime <- fluxes.reduced %>%
-    select(-timeBgn,timeEnd)
+    dplyr::select(-timeBgn,timeEnd)
   
   flux.xts <- as.xts(fluxes.notime,order.by=fluxes.reduced$timeBgn)
   
   # get lat/lon and timezone of station.
   slist <- list.files(path=paste0(flux.path,"/",neon.site,"/"),pattern=".h5",
                       full.names=TRUE,recursive=TRUE)
-  print(slist)
   
   attrs <- h5readAttributes(slist[[1]],neon.site)
   
@@ -109,12 +125,12 @@ extract_NEON_fluxes <- function(neon.site,
   
   if (year == 9999) { # get all years w/ flux data.
     # need, at a minimum, RH, Rg, and Tair.
-    Rh.tmp <- loadByProduct("DP1.00098.001",site=neon.site,startdate="2017-01",avg=30,check.size=F)
-    Rg.tmp <- loadByProduct("DP1.00023.001",site=neon.site,startdate="2017-01",avg=30,check.size=F)
-    Ta.tmp <- loadByProduct("DP1.00003.001",site=neon.site,startdate="2017-01",avg=30,check.size=F)
+    Rh.tmp <- neonUtilities::loadByProduct("DP1.00098.001",site=neon.site,startdate="2017-01",avg=30,check.size=F)
+    Rg.tmp <- neonUtilities::loadByProduct("DP1.00023.001",site=neon.site,startdate="2017-01",avg=30,check.size=F)
+    Ta.tmp <- neonUtilities::loadByProduct("DP1.00003.001",site=neon.site,startdate="2017-01",avg=30,check.size=F)
     
     if (expanded == TRUE) {
-      PAR.tmp <- loadByProduct("DP1.00024.001",site=neon.site,startdate="2017-01",avg=30,check.size=F)
+      PAR.tmp <- neonUtilities::loadByProduct("DP1.00024.001",site=neon.site,startdate="2017-01",avg=30,check.size=F)
     }
   } else if (year > 2015) {
     
@@ -123,12 +139,12 @@ extract_NEON_fluxes <- function(neon.site,
     end.mon   <- paste0(year,"-12")
     
     # need, at a minimum, RH, Rg, and Tair.
-    Rh.tmp <- loadByProduct("DP1.00098.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
-    Rg.tmp <- loadByProduct("DP1.00023.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
-    Ta.tmp <- loadByProduct("DP1.00003.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
+    Rh.tmp <- neonUtilities::loadByProduct("DP1.00098.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
+    Rg.tmp <- neonUtilities::loadByProduct("DP1.00023.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
+    Ta.tmp <- neonUtilities::loadByProduct("DP1.00003.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
     
     if (expanded == TRUE) {
-      PAR.tmp <- loadByProduct("DP1.00024.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
+      PAR.tmp <- neonUtilities::loadByProduct("DP1.00024.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
     }
   } else {
     stop("Year selected predates NEON operation.")
@@ -136,31 +152,31 @@ extract_NEON_fluxes <- function(neon.site,
   
   # pull out met variables.
   Rh <- Rh.tmp$RH_30min %>%
-    filter(as.numeric(horizontalPosition) == 0) %>%
-    filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
-    select(RHMean,startDateTime) 
+    dplyr::filter(as.numeric(horizontalPosition) == 0) %>%
+    dplyr::filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
+    dplyr::select(RHMean,startDateTime) 
   Ta <- Ta.tmp$TAAT_30min %>% 
-    filter(as.numeric(horizontalPosition) == 0) %>% 
-    filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
-    select(tempTripleMean,startDateTime)
+    dplyr::filter(as.numeric(horizontalPosition) == 0) %>% 
+    dplyr::filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
+    dplyr::select(tempTripleMean,startDateTime)
   
   
   if (expanded == TRUE) {
     Rg <- Rg.tmp$SLRNR_30min %>%
-      filter(as.numeric(horizontalPosition) == 0) %>%
-      filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
-      select(inSWMean,outSWMean,inLWMean,outLWMean,startDateTime) 
+      dplyr::filter(as.numeric(horizontalPosition) == 0) %>%
+      dplyr::filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
+      dplyr::select(inSWMean,outSWMean,inLWMean,outLWMean,startDateTime) 
     
     PAR <- PAR.tmp$PARPAR_30min %>%
-      filter(as.numeric(horizontalPosition) == 0) %>%
-      filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
-      select(PARMean,startDateTime)  
+      dplyr::filter(as.numeric(horizontalPosition) == 0) %>%
+      dplyr::filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
+      dplyr::select(PARMean,startDateTime)  
     
   } else {
     Rg <- Rg.tmp$SLRNR_30min %>%
-      filter(as.numeric(horizontalPosition) == 0) %>%
-      filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
-      select(inSWMean,startDateTime) 
+      dplyr::filter(as.numeric(horizontalPosition) == 0) %>%
+      dplyr::filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
+      dplyr::select(inSWMean,startDateTime) 
   }
 
   names(Rh) <- c("Rh","time")

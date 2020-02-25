@@ -47,7 +47,8 @@ though the default is to return the entire period of record for that site. Curre
 assumes that you have a local copy of eddy covariance files (DP4.00200.001) for the site of interest.
 Meterological data *can* also be local, and a location specified by the \code{met.path} argument; if
 no value is provided to \code{met.path}, meteorological data for the site for the requested period
-will be retrieved from the NEON API. Clear spikes are removed using a moving "deviation from median" 
+will be retrieved from the NEON API. Calculates VPD from NEON-provided temp and RH.
+Clear spikes are removed using a moving "deviation from median" 
 filter, described by Brock 1986 and shown to perform well in Starkenburg et al. 2016.
 Default options return a \code{data.frame} that is immediately useable for flux partitioning using 
 \code{REddyProc}, though users are encouraged to verify that the despiking worked appropriately for
