@@ -1,12 +1,18 @@
-#' Title
+#' plot_met_terms
+#' 
+#' Plots the meteological variable terms extracted from extract_NEON_fluxes
 #'
-#' @param data Input dataframe. Must have all 9 terms (3 CO2, 3 water, 3 temperature) from the eddy covariance data product in the timeseries.
+#' @param data \code{data.frame} containing the meteorological variables that should be plotted. Requires
+#' \code{data.frame} to be the expanded version from extract_NEON_fluxes.
 #'
 #'
-#' @return Multipanel plot showing all 9 terms (3 net exchange terms, 3 turbulent flux terms, 3 storage terms.)
+#' @return Multipanel plot showing Tair, RH, VPD, PAR, and Ustar.
+#' 
+#' @author Rich Fiorella \email{rich.fiorella@@utah.edu}
+#' 
 #' @export
 #'
-#' @examples
+#'
 plot_met_terms <- function(data) {
   
   # list of required packages.

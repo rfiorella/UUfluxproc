@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot_NEON_EC_terms.R
 \name{plot_NEON_EC_terms}
 \alias{plot_NEON_EC_terms}
-\title{Title}
+\title{plot_NEON_EC_terms}
 \usage{
 plot_NEON_EC_terms(data)
 }
@@ -13,5 +13,8 @@ plot_NEON_EC_terms(data)
 Multipanel plot showing all 9 terms (3 net exchange terms, 3 turbulent flux terms, 3 storage terms.)
 }
 \description{
-Title
+plot_NEON_EC_terms
+}
+\author{
+Rich Fiorella \email{rich.fiorella@utah.edu}
 }

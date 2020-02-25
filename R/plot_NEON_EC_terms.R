@@ -1,18 +1,13 @@
-#' Title
+#' plot_NEON_EC_terms
 #'
 #' @param data Input dataframe. Must have all 9 terms (3 CO2, 3 water, 3 temperature) from the eddy covariance data product in the timeseries.
 #'
+#' @author Rich Fiorella \email{rich.fiorella@@utah.edu}
 #'
 #' @return Multipanel plot showing all 9 terms (3 net exchange terms, 3 turbulent flux terms, 3 storage terms.)
 #' @export
 #'
-#' @examples
 plot_NEON_EC_terms <- function(data) {
-  
-  # list of required packages.
-  require(ggplot2)
-  require(dplyr)
-  require(gridExtra)
   
   # check to make sure all required terms are present.
   # note: requires columns to have specific names! easiest

@@ -2,16 +2,20 @@
 % Please edit documentation in R/plot_met_terms.R
 \name{plot_met_terms}
 \alias{plot_met_terms}
-\title{Title}
+\title{plot_met_terms}
 \usage{
 plot_met_terms(data)
 }
 \arguments{
-\item{data}{Input dataframe. Must have all 9 terms (3 CO2, 3 water, 3 temperature) from the eddy covariance data product in the timeseries.}
+\item{data}{\code{data.frame} containing the meteorological variables that should be plotted. Requires
+\code{data.frame} to be the expanded version from extract_NEON_fluxes.}
 }
 \value{
-Multipanel plot showing all 9 terms (3 net exchange terms, 3 turbulent flux terms, 3 storage terms.)
+Multipanel plot showing Tair, RH, VPD, PAR, and Ustar.
 }
 \description{
-Title
+Plots the meteological variable terms extracted from extract_NEON_fluxes
+}
+\author{
+Rich Fiorella \email{rich.fiorella@utah.edu}
 }
