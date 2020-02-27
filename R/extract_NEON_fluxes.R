@@ -253,6 +253,8 @@ extract_NEON_fluxes <- function(neon.site,
     tzone(all.data) <- "Etc/GMT+6" 
   } else if (tzone == "EST") {
     tzone(all.data) <- "Etc/GMT+5"
+  } else if (tzone == "AKST") {
+    tzone(all.data) <- "Etc/GMT+9"
   }
   
    #------------------------------------------------------------
