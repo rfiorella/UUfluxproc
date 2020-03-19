@@ -1,4 +1,4 @@
-#' extract_NEON_fluxes
+#' extract_NEON_PMvars
 #'
 #' Extracts NEON eddy covariance data from HDF5 files, merges with relevant meteorolgical data,
 #' and returns a \code{data.frame} for a specified time period. A specific year can be requested,
@@ -30,8 +30,6 @@
 #' @param year Which year to process? If not specified, process all. 
 #' @param flux.path Specify path to flux data you wish to process.
 #' @param met.path  Specify path to meteorological data (if NULL - download from NEON API)
-#' @param expanded Return only the "standard" variables, or an expanded set? Expanded set includes
-#'          individual components of SW/LW fluxes as well as PAR.
 #' @param median.filter Filter half-hourly data using the Brock 86 median filter.
 #' @param out.path If saving a file of results, where should it be saved?
 #' @param write.to.file Write to csv file?
@@ -43,24 +41,21 @@
 #'         radiation variables, including outgoing SW, incoming and outgoing LW, and PAR.
 #'         
 #' @export
-extract_NEON_fluxes <- function(neon.site,
+#' @import neonUtilities
+#' @import rhdf5
+#' @import xts
+#' @import lubridate
+#' @import tidyverse
+extract_NEON_PMvars <- function(neon.site,
                                 year=9999,
                                 flux.path="~/Dropbox/NEON/DP4_00200_001",
                                 met.path,
-                                expanded=FALSE,
                                 median.filter=TRUE,
-                                write.to.file=FALSE,
+                                write.to.file=TRUE,
                                 out.path) {
   
-  # list required packages
-  require(rhdf5)
-  require(neonUtilities)
-  require(xts)
-  require(lubridate)
-  require(tidyverse)
-  
   # stack flux data.
-  fluxes <- stackEddy(paste0(flux.path,"/",neon.site),level="dp04")
+  fluxes <- neonUtilities::stackEddy(paste0(flux.path,"/",neon.site),level="dp04")
   
   fluxes.flat <- fluxes[[neon.site]] # flatten list structure.
 
@@ -78,10 +73,8 @@ extract_NEON_fluxes <- function(neon.site,
            Sw=data.fluxH2o.stor.flux,St=data.fluxTemp.stor.flux)
   
   # cut down further if not expanded
-  if (!expanded) {
     fluxes.reduced <- fluxes.reduced %>%
       select(timeBgn,timeEnd,nee,lhf,shf,ustar)
-  }
   
   # convert "NEON" time to POSIXct
   fluxes.reduced$timeBgn <- as.POSIXct(fluxes.reduced$timeBgn,format="%Y-%m-%dT%H:%M:%S.%OSZ",tz="UTC")
@@ -103,127 +96,249 @@ extract_NEON_fluxes <- function(neon.site,
   lat <- as.numeric(attrs$LatTow)
   lon <- as.numeric(attrs$LonTow)
   tzone <- as.character(attrs$ZoneTime)
+  hgts <- as.numeric(attrs$DistZaxsLvlMeasTow)
+  
+  # get h2o profile
+  h2oprof.tmp <- neonUtilities::stackEddy(paste0(flux.path,"/",neon.site),level="dp01",avg=30,var="rtioMoleWetH2o")
+  
+  # simplify h2o profile
+  h2oprof <- h2oprof.tmp[[1]] %>%
+    select(verticalPosition,timeBgn,data.h2oStor.rtioMoleWetH2o.mean) %>%
+    rename(h2o = data.h2oStor.rtioMoleWetH2o.mean,time = timeBgn) %>%
+    mutate(verticalPosition = as.numeric(verticalPosition)/10) %>%
+    filter(!is.na(verticalPosition)) %>%
+    mutate(height = hgts[verticalPosition]) %>%
+    select(-verticalPosition) %>%
+    pivot_wider(names_from=height,
+                names_prefix="H2O",
+                names_sep="_",
+                values_from=h2o)
+  
+  h2oprof$time <- as.POSIXct(h2oprof$time,format="%Y-%m-%dT%H:%M:%S.%OSZ",tz="UTC")
+  
+  # get co2 profile
+  co2prof.tmp <- neonUtilities::stackEddy(paste0(flux.path,"/",neon.site),level="dp01",avg=30,var="rtioMoleDryCo2")
+  
+  # simplify co2 profile
+  co2prof <- co2prof.tmp[[1]] %>%
+    select(verticalPosition,timeBgn,data.co2Stor.rtioMoleDryCo2.mean) %>%
+    rename(co2 = data.co2Stor.rtioMoleDryCo2.mean, time = timeBgn) %>%
+    mutate(verticalPosition = as.numeric(verticalPosition)/10) %>%
+    filter(!is.na(verticalPosition)) %>%
+    mutate(height = hgts[verticalPosition]) %>%
+    select(-verticalPosition) %>%
+    pivot_wider(names_from=height,
+                names_prefix="CO2_",
+                values_from=co2)
+  
+  co2prof$time <- as.POSIXct(co2prof$time,format="%Y-%m-%dT%H:%M:%S.%OSZ",tz="UTC")
+
   #------------------------------------------------------------
   # load met data.
   #------------------------------------------------------------
   
-  if (year == 9999) { # get all years w/ flux data.
-    # need, at a minimum, RH, Rg, and Tair.
-    Rh.tmp <- loadByProduct("DP1.00098.001",site=neon.site,startdate="2017-01",avg=30,check.size=F)
-    Rg.tmp <- loadByProduct("DP1.00023.001",site=neon.site,startdate="2017-01",avg=30,check.size=F)
-    Ta.tmp <- loadByProduct("DP1.00003.001",site=neon.site,startdate="2017-01",avg=30,check.size=F)
-    
-    if (expanded == TRUE) {
-      PAR.tmp <- loadByProduct("DP1.00024.001",site=neon.site,startdate="2017-01",avg=30,check.size=F)
-    }
-  } else if (year > 2015) {
+  if (year > 2016) {
     
     # set start month.
     start.mon <- paste0(year,"-01")
     end.mon   <- paste0(year,"-12")
     
     # need, at a minimum, RH, Rg, and Tair.
-    Rh.tmp <- loadByProduct("DP1.00098.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
-    Rg.tmp <- loadByProduct("DP1.00023.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
-    Ta.tmp <- loadByProduct("DP1.00003.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
+    Rh.tmp <- neonUtilities::loadByProduct("DP1.00098.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
+    Rg.tmp <- neonUtilities::loadByProduct("DP1.00023.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
+    Ttrip.tmp <- neonUtilities::loadByProduct("DP1.00003.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
+    Tsing.tmp <- neonUtilities::loadByProduct("DP1.00002.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
+    ws.tmp <- neonUtilities::loadByProduct("DP1.00001.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
+    bp.tmp <- neonUtilities::loadByProduct("DP1.00004.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
+    soihf.tmp <- neonUtilities::loadByProduct("DP1.00040.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
     
-    if (expanded == TRUE) {
-      PAR.tmp <- loadByProduct("DP1.00024.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
-    }
   } else {
     stop("Year selected predates NEON operation.")
   }
   
-  # pull out met variables.
-  Rh <- Rh.tmp$RH_30min %>%
-    filter(as.numeric(horizontalPosition) == 0) %>%
-    filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
-    select(RHMean,startDateTime) 
-  Ta <- Ta.tmp$TAAT_30min %>% 
-    filter(as.numeric(horizontalPosition) == 0) %>% 
-    filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
-    select(tempTripleMean,startDateTime)
+  #====================================
+  # pull out and simplify met variables.
+  #------------------------------------
+  # relative humidity
+  Rh1 <- Rh.tmp$RH_30min %>% 
+    select(RHMean,startDateTime,horizontalPosition,verticalPosition) %>%
+    mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
+    select(-horizontalPosition,-verticalPosition)
+  Rh2 <- Rh.tmp$sensor_positions_00098 %>%
+    select(HOR.VER,xOffset,yOffset,zOffset)
   
+  Rh <- left_join(Rh1,Rh2,by="HOR.VER") %>%
+    mutate(dist.from.tower = sqrt(xOffset^2 + yOffset^2)) %>%
+    filter(dist.from.tower < 30) %>%
+    select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
+    rename(time = startDateTime) %>%
+    pivot_wider(names_from=zOffset,
+                names_prefix="RH",
+                names_sep="_",
+                values_from=RHMean)
   
-  if (expanded == TRUE) {
-    Rg <- Rg.tmp$SLRNR_30min %>%
-      filter(as.numeric(horizontalPosition) == 0) %>%
-      filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
-      select(inSWMean,outSWMean,inLWMean,outLWMean,startDateTime) 
-    
-    PAR <- PAR.tmp$PARPAR_30min %>%
-      filter(as.numeric(horizontalPosition) == 0) %>%
-      filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
-      select(PARMean,startDateTime)  
-    
-  } else {
-    Rg <- Rg.tmp$SLRNR_30min %>%
-      filter(as.numeric(horizontalPosition) == 0) %>%
-      filter(as.numeric(verticalPosition) == max(as.numeric(verticalPosition))) %>%
-      select(inSWMean,startDateTime) 
-  }
-
-  names(Rh) <- c("Rh","time")
-  names(Ta) <- c("Ta","time")
-
-  if (expanded == TRUE) {
-    names(Rg) <- c("SWdown","SWup","LWdown","LWup","time")
-    names(PAR) <- c("PAR","time")
-  } else {
-    names(Rg) <- c("Rg","time")
-  }
+  rm(Rh1, Rh2, Rh.tmp)
+  
+  # single-aspirated air temperature
+  Tsing1 <- Tsing.tmp$SAAT_30min %>%
+    select(tempSingleMean,startDateTime,horizontalPosition,verticalPosition) %>%
+    mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
+    select(-horizontalPosition,-verticalPosition)
+  Tsing2 <- Tsing.tmp$sensor_positions_00002 %>%
+    select(HOR.VER,xOffset,yOffset,zOffset)
+  
+  Tsing <- left_join(Tsing1,Tsing2,by="HOR.VER") %>%
+    mutate(dist.from.tower = sqrt(xOffset^2 + yOffset^2)) %>%
+    filter(dist.from.tower < 30) %>%
+    select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
+    rename(time = startDateTime) %>%
+    pivot_wider(names_from=zOffset,
+                names_prefix="Temp",
+                names_sep="_",
+                values_from=tempSingleMean)
+  
+  rm(Tsing1, Tsing2, Tsing.tmp)
+  
+  # triple-aspirated air temperature
+  Ttrip1 <- Ttrip.tmp$TAAT_30min %>%
+    select(tempTripleMean,startDateTime,horizontalPosition,verticalPosition) %>%
+    mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
+    select(-horizontalPosition,-verticalPosition)
+  Ttrip2 <- Ttrip.tmp$sensor_positions_00003 %>%
+    select(HOR.VER,xOffset,yOffset,zOffset)
+  
+  Ttrip <- left_join(Ttrip1,Ttrip2,by="HOR.VER") %>%
+    mutate(dist.from.tower = sqrt(xOffset^2 + yOffset^2)) %>%
+    filter(dist.from.tower < 30) %>%
+    select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
+    rename(time = startDateTime) %>%
+    pivot_wider(names_from=zOffset,
+                names_prefix="TTemp",
+                names_sep="_",
+                values_from=tempTripleMean)
+  
+  rm(Ttrip1, Ttrip2, Ttrip.tmp)
+  
+  # barometric pressure
+  bp1 <- bp.tmp$BP_30min %>%
+    select(staPresMean,startDateTime,horizontalPosition,verticalPosition) %>%
+    mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
+    select(-horizontalPosition,-verticalPosition)
+  bp2 <- bp.tmp$sensor_positions_00004 %>%
+    select(HOR.VER,xOffset,yOffset,zOffset)
+  
+  bp <- left_join(bp1,bp2,by="HOR.VER") %>%
+    mutate(dist.from.tower = sqrt(xOffset^2 + yOffset^2)) %>%
+    filter(dist.from.tower < 30) %>%
+    select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
+    rename(time = startDateTime) %>%
+    pivot_wider(names_from=zOffset,
+                names_prefix="pres",
+                names_sep="_",
+                values_from=staPresMean)
+  
+  rm(bp1, bp2, bp.tmp)
+  
+  # wind speed
+  ws1 <- ws.tmp$`2DWSD_30min` %>%
+    select(windSpeedMean,startDateTime,horizontalPosition,verticalPosition) %>%
+    mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
+    select(-horizontalPosition,-verticalPosition)
+  ws2 <- ws.tmp$sensor_positions_00001 %>%
+    select(HOR.VER,xOffset,yOffset,zOffset)
+  
+  ws <- left_join(ws1,ws2,by="HOR.VER") %>%
+    mutate(dist.from.tower = sqrt(xOffset^2 + yOffset^2)) %>%
+    filter(dist.from.tower < 30) %>%
+    select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
+    rename(time = startDateTime) %>%
+    pivot_wider(names_from=zOffset,
+                names_prefix="ws",
+                names_sep="_",
+                values_from=windSpeedMean)
+  
+  rm(ws1, ws2, ws.tmp)
+  
+  # radiation terms
+  Rg1 <- Rg.tmp$SLRNR_30min %>%
+    select(startDateTime,horizontalPosition,verticalPosition,inSWMean,outSWMean,outLWMean,inLWMean) %>%
+    mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
+    select(-horizontalPosition,-verticalPosition)
+  Rg2 <- Rg.tmp$sensor_positions_00023 %>%
+    select(HOR.VER,xOffset,yOffset,zOffset)
+  
+  Rg <- left_join(Rg1,Rg2,by="HOR.VER") %>%
+    mutate(dist.from.tower = sqrt(xOffset^2 + yOffset^2)) %>%
+    filter(dist.from.tower < 30) %>%
+    select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
+    mutate(Rnet = (inSWMean + inLWMean) - (outSWMean + outLWMean)) %>%
+    rename(inSW = inSWMean, inLW = inLWMean, outSW = outSWMean, outLW = outLWMean, time = startDateTime) %>%
+    pivot_wider(names_from=zOffset,
+                values_from=c(inSW,inLW,outSW,outLW,Rnet))
+  
+  rm(Rg1,Rg2,Rg.tmp)
+  
+  # soil heat flux
+  soihf1 <- soihf.tmp$SHF_30min %>%
+    select(startDateTime,horizontalPosition,verticalPosition,SHFMean) %>%
+    mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
+    select(-horizontalPosition,-verticalPosition)
+  soihf2 <- soihf.tmp$sensor_positions_00040 %>%
+    select(HOR.VER,xOffset,yOffset,zOffset)
+  
+  soihf <- left_join(soihf1,soihf2,by="HOR.VER") %>%
+    mutate(dist.from.tower = round(sqrt(xOffset^2 + yOffset^2),3)) %>%
+    filter(dist.from.tower < 30) %>%
+    select(-HOR.VER,-xOffset,-yOffset,-zOffset) %>%
+    rename(time = startDateTime) %>%
+    pivot_wider(names_from=dist.from.tower,
+                names_prefix="SHF",
+                names_sep="_",
+                values_from=SHFMean)
+  
+  rm(soihf1,soihf2,soihf.tmp)
   
   # change time vars to character, then to posix ct.
   Rg$time <- as.POSIXct(Rg$time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC")
   Rh$time <- as.POSIXct(Rh$time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC")
-  Ta$time <- as.POSIXct(Ta$time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC")
-  
-  if (expanded == TRUE) {
-    PAR$time <- as.POSIXct(PAR$time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC")
-  }
-  
+  Ttrip$time <- as.POSIXct(Ttrip$time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC")
+  ws$time <- as.POSIXct(ws$time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC")
+  bp$time <- as.POSIXct(bp$time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC")
+  Tsing$time <- as.POSIXct(Tsing$time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC")
+  soihf$time <- as.POSIXct(soihf$time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC")
+
   # convert data to xts objects and then merge.
-  if (expanded == TRUE) {
-    Rg.xts <- xts(Rg[,1:4],order.by=Rg$time)
-  }  else {
-    Rg.xts <- xts(Rg$Rg,order.by=Rg$time)
-  }
-  Rh.xts <- xts(Rh$Rh,order.by=Rh$time)
-  Ta.xts <- xts(Ta$Ta,order.by=Ta$time)
-  
-  if (expanded == TRUE) {
-    PAR.xts <- xts(PAR$PAR,order.by=PAR$time)
-  }
+  Rg.xts <- xts(Rg[,2:ncol(Rg)],order.by=Rg$time)
+  Rh.xts <- xts(Rh[,2:ncol(Rh)],order.by=Rh$time)
+  ws.xts <- xts(ws[,2:ncol(ws)],order.by=ws$time)
+  bp.xts <- xts(bp[,2:ncol(bp)],order.by=bp$time)
+  Ttrip.xts <- xts(Ttrip[,2:ncol(Ttrip)],order.by=Ttrip$time)
+  Tsing.xts <- xts(Tsing[,2:ncol(Tsing)],order.by=Tsing$time)
+  soihf.xts <- xts(soihf[,2:ncol(soihf)],order.by=soihf$time)
+  h2oprof.xts <- xts(h2oprof[,2:ncol(h2oprof)],order.by=h2oprof$time)
+  co2prof.xts <- xts(co2prof[,2:ncol(co2prof)],order.by=co2prof$time)
 
-  if (expanded == TRUE) {
-    names(Rg.xts) <- c("SWdown","SWup","LWdown","LWup")
-    names(PAR.xts) <- "PAR"
-  } else {
-    names(Rg.xts) <- "Rg"
-  }
+  minTime <- as.POSIXct(min(c(min(index(Rg.xts)),min(index(Rh.xts)),
+                              min(index(Ttrip.xts)),min(index(flux.xts)),
+                              min(index(bp.xts)),min(index(ws.xts)),
+                              min(index(Tsing.xts)),min(index(soihf.xts)),
+                              min(index(h2oprof.xts)),min(index(co2prof.xts)))))
   
-  names(Rh.xts) <- "Rh"
-  names(Ta.xts) <- "Ta"
-
-  minTime <- as.POSIXct(min(c(min(index(Rg.xts)),min(index(Rh.xts)),min(index(Ta.xts)),min(index(flux.xts)))),origin="1970-01-01")
-  maxTime <- as.POSIXct(max(c(max(index(Rg.xts)),max(index(Rh.xts)),max(index(Ta.xts)),max(index(flux.xts)))),origin="1970-01-01")
+  maxTime <- as.POSIXct(max(c(max(index(Rg.xts)),max(index(Rh.xts)),
+                              max(index(Ttrip.xts)),max(index(flux.xts)),
+                              max(index(bp.xts)),max(index(ws.xts)),
+                              max(index(Tsing.xts)),max(index(soihf.xts)),
+                              max(index(h2oprof.xts)),max(index(co2prof.xts)))))
   
   dummy.ts <- seq.POSIXt(minTime,maxTime,by=1800)
   dummy.data <- rep(NA,length(dummy.ts))
   
   dummy.xts <- xts(dummy.data,order.by=dummy.ts)
   
-  # create bound xts
-  if (expanded == TRUE) {
-    all.data <- merge.xts(dummy.xts,Rg.xts,Rh.xts,Ta.xts,PAR.xts,flux.xts)
-  } else {
-    all.data <- merge.xts(dummy.xts,Rg.xts,Rh.xts,Ta.xts,flux.xts)
-  }
-  
-  # calculate vpd from Tair and Rh
-  all.data$vpd <- (100-all.data$Rh)/100*ifelse(all.data$Ta < 0,
-                      exp(23.33086-6111.72784/(all.data$Ta+273.15)+0.15215*log(all.data$Ta+273.15)), # vapor over ice
-                      exp(53.67957-6743.769/(all.data$Ta+273.15)-4.8451*log(all.data$Ta+273.15))) # vapor over liquid
+  all.data <- merge.xts(dummy.xts,Rg.xts,Rh.xts,Tsing.xts,Ttrip.xts,
+                        bp.xts,ws.xts,flux.xts,soihf.xts,
+                        h2oprof.xts,co2prof.xts)
+
   
   if (year != 9999) {
     all.data <- all.data[paste0(start.mon,"/",end.mon)]  
@@ -239,75 +354,47 @@ extract_NEON_fluxes <- function(neon.site,
     tzone(all.data) <- "Etc/GMT+5"
   }
   
+  data.out <- data.frame(time=index(all.data),coredata(all.data)) %>%
+    select(-timeEnd,-dummy.xts) %>%
+    rename(H = shf)
+  
    #------------------------------------------------------------
-  # load more data if we're going for the expanded package.
-  # convert to MPI required format.
-  out.data <- coredata(all.data)
-  time.tmp <- index(all.data)
-  
-  # pull out time variables as required.
-  yr <- year(time.tmp)
-  doy <- yday(time.tmp)
-  hr <- as.numeric(hour(time.tmp)+minute(time.tmp)/60)
-  
-  if (expanded == TRUE) {
-    head1 <- c("Year","DoY","Hour","NEE","Fc","Sc","LH","Fw","Sw","H","FT","ST","SWup",
-               "SWdown","LWup","LWdown","Tair","Tsoil","rH","VPD","Ustar","PAR")
-    
-    data.out <- data.frame(yr,doy,hr,out.data[,"nee"],out.data[,"Fc"],out.data[,"Sc"],
-                           out.data[,"lhf"],out.data[,"Fw"],out.data[,"Sw"],
-                           out.data[,"shf"],out.data[,"Ft"],out.data[,"St"],
-                           out.data[,"SWup"],out.data[,"SWdown"],out.data[,"LWup"],out.data[,"LWdown"],
-                           out.data[,"Ta"],rep(NA,nrow(out.data)),
-                           out.data[,"Rh"],out.data[,"vpd"],out.data[,"ustar"],out.data[,"PAR"])
-  } else {
-  
-    head1 <- c("Year","DoY","Hour","NEE","LH","H","Rg","Tair","Tsoil","rH","VPD","Ustar")
-    head2 <- c("--","--","--","umol-2-s","Wm-2","Wm-2","Wm-2","degC","degC","%","hPa","ms-1")
-    data.out <- data.frame(yr,doy,hr,out.data[,"nee"],
-                           out.data[,"lhf"],out.data[,"shf"],out.data[,"Rg"],
-                           out.data[,"Ta"],rep(NA,nrow(out.data)),
-                           out.data[,"Rh"],out.data[,"vpd"],out.data[,"ustar"])
-  }
-  
-  # return a data frame.
-  names(data.out) <- head1
   
   if (median.filter == TRUE) {
     
     #---------------- Filter NEE ----------------
     # put in median deviation filter from Brock 86 / Starkenburg 2016.
     
-    NEE.filt <- rollapply(data.out$NEE,7,median,na.rm=TRUE,fill=NA)
-    NEE.logi <- abs(data.out$NEE - NEE.filt) > 10
+    NEE.filt <- rollapply(data.out$nee,7,median,na.rm=TRUE,fill=NA)
+    NEE.logi <- abs(data.out$nee - NEE.filt) > 10
     
-    data.out$NEE[NEE.logi == TRUE] <- NA
+    data.out$nee[NEE.logi == TRUE] <- NA
     
     # remove points that are 5 sigma away from mean?
-    NEE.mu <- mean(data.out$NEE,na.rm=TRUE)
-    NEE.sd <- sd(data.out$NEE,na.rm=TRUE)
+    NEE.mu <- mean(data.out$nee,na.rm=TRUE)
+    NEE.sd <- sd(data.out$nee,na.rm=TRUE)
 
-    NEE.oor <- (data.out$NEE < NEE.mu-4*NEE.sd) | (data.out$NEE > NEE.mu+4*NEE.sd)
+    NEE.oor <- (data.out$nee < NEE.mu-4*NEE.sd) | (data.out$nee > NEE.mu+4*NEE.sd)
 
     # set out of range values to missing:
-    data.out$NEE[NEE.oor == TRUE] <- NA
+    data.out$nee[NEE.oor == TRUE] <- NA
 
     #---------------- Filter LH -----------------
     # median deviation filter of Brock 86 / Starkenburg 16
     
-    LH.filt <- zoo::rollapply(data.out$LH,7,median,na.rm=TRUE,fill=NA)
-    LH.logi <- abs(data.out$LH - LH.filt) > 100 # this threshold has not been checked!
+    LH.filt <- zoo::rollapply(data.out$lhf,7,median,na.rm=TRUE,fill=NA)
+    LH.logi <- abs(data.out$lhf - LH.filt) > 100 # this threshold has not been checked!
     
-    data.out$LH[LH.logi == TRUE] <- NA # replace with missing
+    data.out$lhf[LH.logi == TRUE] <- NA # replace with missing
     
     # remove points that are 4 sigma away from mean?
-    LH.mu <- mean(data.out$LH,na.rm=TRUE)
-    LH.sd <- sd(data.out$LH,na.rm=TRUE)
+    LH.mu <- mean(data.out$lhf,na.rm=TRUE)
+    LH.sd <- sd(data.out$lhf,na.rm=TRUE)
     
-    LH.oor <- (data.out$LH < LH.mu-4*LH.sd) | (data.out$LH > LH.mu+4*LH.sd)
+    LH.oor <- (data.out$lhf < LH.mu-4*LH.sd) | (data.out$lhf > LH.mu+4*LH.sd)
     
     # set out of range values to missing:
-    data.out$LH[LH.oor == TRUE] <- NA
+    data.out$lhf[LH.oor == TRUE] <- NA
     
     #---------------- Filter H ------------------
     # median deviation filter of Brock 86 / Starkenburg 16
@@ -315,7 +402,7 @@ extract_NEON_fluxes <- function(neon.site,
     H.filt <- zoo::rollapply(data.out$H,7,median,na.rm=TRUE,fill=NA)
     H.logi <- abs(data.out$H - H.filt) > 100 # this threshold has not been checked!
     
-    data.out$LH[H.logi == TRUE] <- NA # replace with missing
+    data.out$H[H.logi == TRUE] <- NA # replace with missing
     
     # remove points that are 4 sigma away from mean?
     H.mu <- mean(data.out$H,na.rm=TRUE)
@@ -333,18 +420,17 @@ extract_NEON_fluxes <- function(neon.site,
 
   #------------------------------------------------------------
   # write out data file if requested.
-  if (write.to.file == TRUE & expanded == FALSE) {
+  if (write.to.file == TRUE) {
     if (is.null(out.path)) {
       stop("Attempting to write to file, but no path specified!")
     } else {
-      data.mpi.out <- do.call(rbind,list(head1,head2,data.out))
-      write.table(data.mpi.out,
-                  paste0(out.path,"/",Sys.Date(),"_",neon.site,"_",year,"_forREddyProc.txt"),
-                  sep="\t",col.names=FALSE,row.names=FALSE,quote=FALSE)
+      write.csv(data.out,
+                  paste0(out.path,"/",Sys.Date(),"_",neon.site,"_",year,"_PMinv.csv"),
+                  row.names=FALSE,quote=FALSE)
     }
   }
     
-  return(data.out)
+ # return(data.out)
 }  
   
   
