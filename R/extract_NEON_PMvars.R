@@ -89,7 +89,6 @@ extract_NEON_PMvars <- function(neon.site,
   # get lat/lon and timezone of station.
   slist <- list.files(path=paste0(flux.path,"/",neon.site,"/"),pattern=".h5",
                       full.names=TRUE,recursive=TRUE)
-  print(slist)
   
   attrs <- h5readAttributes(slist[[1]],neon.site)
   
@@ -110,7 +109,7 @@ extract_NEON_PMvars <- function(neon.site,
     mutate(height = hgts[verticalPosition]) %>%
     select(-verticalPosition) %>%
     pivot_wider(names_from=height,
-                names_prefix="H2O",
+                names_prefix="H2O_",
                 names_sep="_",
                 values_from=h2o)
   
@@ -193,7 +192,7 @@ extract_NEON_PMvars <- function(neon.site,
     select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
     rename(time = startDateTime) %>%
     pivot_wider(names_from=zOffset,
-                names_prefix="Temp",
+                names_prefix="singTemp",
                 names_sep="_",
                 values_from=tempSingleMean)
   
@@ -213,7 +212,7 @@ extract_NEON_PMvars <- function(neon.site,
     select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
     rename(time = startDateTime) %>%
     pivot_wider(names_from=zOffset,
-                names_prefix="TTemp",
+                names_prefix="tripTemp",
                 names_sep="_",
                 values_from=tempTripleMean)
   
@@ -289,11 +288,11 @@ extract_NEON_PMvars <- function(neon.site,
   soihf <- left_join(soihf1,soihf2,by="HOR.VER") %>%
     mutate(dist.from.tower = round(sqrt(xOffset^2 + yOffset^2),3)) %>%
     filter(dist.from.tower < 30) %>%
-    select(-HOR.VER,-xOffset,-yOffset,-zOffset) %>%
+    filter(zOffset == -0.08) %>%
+    select(-xOffset,-yOffset,-zOffset,-dist.from.tower) %>%
     rename(time = startDateTime) %>%
-    pivot_wider(names_from=dist.from.tower,
-                names_prefix="SHF",
-                names_sep="_",
+    pivot_wider(names_prefix="SHF",
+                names_from=HOR.VER,
                 values_from=SHFMean)
   
   rm(soihf1,soihf2,soihf.tmp)
@@ -335,8 +334,8 @@ extract_NEON_PMvars <- function(neon.site,
   
   dummy.xts <- xts(dummy.data,order.by=dummy.ts)
   
-  all.data <- merge.xts(dummy.xts,Rg.xts,Rh.xts,Tsing.xts,Ttrip.xts,
-                        bp.xts,ws.xts,flux.xts,soihf.xts,
+  all.data <- merge.xts(dummy.xts,flux.xts,Rg.xts,Rh.xts,Tsing.xts,Ttrip.xts,
+                        bp.xts,ws.xts,soihf.xts,
                         h2oprof.xts,co2prof.xts)
 
   
@@ -417,7 +416,16 @@ extract_NEON_PMvars <- function(neon.site,
   attr(data.out,"lat") <- lat 
   attr(data.out,"lon") <- lon 
   attr(data.out,"tzone") <- tzone
-
+  
+  dfDigits <- function(x, digits = 3) {
+    ## x is a data.frame
+    for (col in colnames(x)[sapply(x, class) == 'numeric'])
+      x[,col] <- round(x[,col], digits = digits)
+    x
+  }
+  
+  # round data frame to 3 dps
+  data.out <- dfDigits(data.out)
   #------------------------------------------------------------
   # write out data file if requested.
   if (write.to.file == TRUE) {
@@ -430,7 +438,7 @@ extract_NEON_PMvars <- function(neon.site,
     }
   }
     
- # return(data.out)
+# return(data.out)
 }  
   
   
