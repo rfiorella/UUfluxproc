@@ -132,6 +132,22 @@ extract_NEON_PMvars <- function(neon.site,
   
   co2prof$time <- as.POSIXct(co2prof$time,format="%Y-%m-%dT%H:%M:%S.%OSZ",tz="UTC")
 
+  # get sonicT profile??
+  sonicT.tmp <- neonUtilities::stackEddy(paste0(flux.path,"/",neon.site),level="dp01",avg=30,var="tempAir")
+  
+  sonicprof <- sonicT.tmp[[1]] %>%
+    select(verticalPosition,timeBgn,data.soni.tempAir.mean) %>%
+    rename(sonT = data.soni.tempAir.mean, time = timeBgn) %>%
+    mutate(verticalPosition = as.numeric(verticalPosition)/10) %>%
+    filter(!is.na(verticalPosition)) %>%
+    mutate(height = hgts[verticalPosition]) %>%
+    select(-verticalPosition) %>%
+    pivot_wider(names_from=height,
+                names_prefix="sonT_",
+                values_from=sonT)
+  
+  sonicprof$time <- as.POSIXct(sonicprof$time,format="%Y-%m-%dT%H:%M:%S.%OSZ",tz="UTC")
+  
   #------------------------------------------------------------
   # load met data.
   #------------------------------------------------------------
@@ -316,6 +332,7 @@ extract_NEON_PMvars <- function(neon.site,
                 names_sep="_",
                 values_from=priPrecipBulk)
   
+  rm(prec.tmp,prec1,prec2)
   
   # change time vars to character, then to posix ct.
   Rg$time <- as.POSIXct(Rg$time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC")
@@ -338,17 +355,20 @@ extract_NEON_PMvars <- function(neon.site,
   prec.xts <- xts(prec[,2:ncol(prec)],order.by=prec$time)
   h2oprof.xts <- xts(h2oprof[,2:ncol(h2oprof)],order.by=h2oprof$time)
   co2prof.xts <- xts(co2prof[,2:ncol(co2prof)],order.by=co2prof$time)
+  sonicprof.xts <- xts(sonicprof[,2:ncol(sonicprof)],order.by=sonicprof$time)
 
   minTime <- as.POSIXct(min(c(min(index(Rg.xts)),min(index(Rh.xts)),
                               min(index(Ttrip.xts)),min(index(flux.xts)),
                               min(index(bp.xts)),min(index(ws.xts)),
                               min(index(Tsing.xts)),min(index(soihf.xts)),
+                              min(index(sonicprof.xts)),min(index(prec.xts)),
                               min(index(h2oprof.xts)),min(index(co2prof.xts)))))
   
   maxTime <- as.POSIXct(max(c(max(index(Rg.xts)),max(index(Rh.xts)),
                               max(index(Ttrip.xts)),max(index(flux.xts)),
                               max(index(bp.xts)),max(index(ws.xts)),
                               max(index(Tsing.xts)),max(index(soihf.xts)),
+                              max(index(sonicprof.xts)),max(index(prec.xts)),
                               max(index(h2oprof.xts)),max(index(co2prof.xts)))))
   
   dummy.ts <- seq.POSIXt(minTime,maxTime,by=1800)
@@ -356,7 +376,7 @@ extract_NEON_PMvars <- function(neon.site,
   
   dummy.xts <- xts(dummy.data,order.by=dummy.ts)
   
-  all.data <- merge.xts(dummy.xts,Rg.xts,Rh.xts,Tsing.xts,Ttrip.xts,
+  all.data <- merge.xts(dummy.xts,Rg.xts,Rh.xts,Tsing.xts,Ttrip.xts,sonicprof.xts,
                         bp.xts,ws.xts,flux.xts,soihf.xts,prec.xts,
                         h2oprof.xts,co2prof.xts)
 
