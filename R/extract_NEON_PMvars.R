@@ -150,6 +150,7 @@ extract_NEON_PMvars <- function(neon.site,
     ws.tmp <- neonUtilities::loadByProduct("DP1.00001.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
     bp.tmp <- neonUtilities::loadByProduct("DP1.00004.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
     soihf.tmp <- neonUtilities::loadByProduct("DP1.00040.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
+    prec.tmp <- neonUtilities::loadByProduct("DP1.00006.001",site=neon.site,startdate=start.mon,enddate=end.mon,avg=30,check.size=F)
     
   } else {
     stop("Year selected predates NEON operation.")
@@ -297,6 +298,25 @@ extract_NEON_PMvars <- function(neon.site,
   
   rm(soihf1,soihf2,soihf.tmp)
   
+  # precipitation amounts
+  prec1 <- prec.tmp$PRIPRE_30min %>%
+    select(startDateTime,horizontalPosition,verticalPosition,priPrecipBulk) %>%
+    mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
+    select(-horizontalPosition,-verticalPosition)
+  prec2 <- prec.tmp$sensor_positions_00006 %>%
+    select(HOR.VER,xOffset,yOffset,zOffset)  
+  
+  prec <- left_join(prec1,prec2,by="HOR.VER") %>%
+    mutate(dist.from.tower = round(sqrt(xOffset^2 + yOffset^2),3)) %>%
+    filter(dist.from.tower < 30) %>%
+    select(-HOR.VER,-xOffset,-yOffset,-zOffset) %>%
+    rename(time = startDateTime) %>%
+    pivot_wider(names_from=dist.from.tower,
+                names_prefix="Precip",
+                names_sep="_",
+                values_from=priPrecipBulk)
+  
+  
   # change time vars to character, then to posix ct.
   Rg$time <- as.POSIXct(Rg$time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC")
   Rh$time <- as.POSIXct(Rh$time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC")
@@ -305,6 +325,7 @@ extract_NEON_PMvars <- function(neon.site,
   bp$time <- as.POSIXct(bp$time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC")
   Tsing$time <- as.POSIXct(Tsing$time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC")
   soihf$time <- as.POSIXct(soihf$time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC")
+  prec$time <- as.POSIXct(prec$time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC")
 
   # convert data to xts objects and then merge.
   Rg.xts <- xts(Rg[,2:ncol(Rg)],order.by=Rg$time)
@@ -314,6 +335,7 @@ extract_NEON_PMvars <- function(neon.site,
   Ttrip.xts <- xts(Ttrip[,2:ncol(Ttrip)],order.by=Ttrip$time)
   Tsing.xts <- xts(Tsing[,2:ncol(Tsing)],order.by=Tsing$time)
   soihf.xts <- xts(soihf[,2:ncol(soihf)],order.by=soihf$time)
+  prec.xts <- xts(prec[,2:ncol(prec)],order.by=prec$time)
   h2oprof.xts <- xts(h2oprof[,2:ncol(h2oprof)],order.by=h2oprof$time)
   co2prof.xts <- xts(co2prof[,2:ncol(co2prof)],order.by=co2prof$time)
 
@@ -334,8 +356,8 @@ extract_NEON_PMvars <- function(neon.site,
   
   dummy.xts <- xts(dummy.data,order.by=dummy.ts)
   
-  all.data <- merge.xts(dummy.xts,flux.xts,Rg.xts,Rh.xts,Tsing.xts,Ttrip.xts,
-                        bp.xts,ws.xts,soihf.xts,
+  all.data <- merge.xts(dummy.xts,Rg.xts,Rh.xts,Tsing.xts,Ttrip.xts,
+                        bp.xts,ws.xts,flux.xts,soihf.xts,prec.xts,
                         h2oprof.xts,co2prof.xts)
 
   
