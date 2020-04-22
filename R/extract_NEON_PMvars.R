@@ -46,6 +46,8 @@
 #' @import xts
 #' @import lubridate
 #' @import tidyverse
+#' @importFrom magrittr %>%
+#' 
 extract_NEON_PMvars <- function(neon.site,
                                 year=9999,
                                 flux.path="~/Dropbox/NEON/DP4_00200_001",
@@ -61,12 +63,12 @@ extract_NEON_PMvars <- function(neon.site,
 
   # extract required variables.
   fluxes.reduced <- fluxes.flat %>%
-    select(timeBgn,timeEnd, # time variables
+    dplyr::select(timeBgn,timeEnd, # time variables
            data.fluxCo2.nsae.flux,data.fluxCo2.stor.flux,data.fluxCo2.turb.flux, # CO2 fluxes
            data.fluxH2o.nsae.flux,data.fluxH2o.stor.flux,data.fluxH2o.turb.flux, # H2O fluxes,
            data.fluxTemp.nsae.flux,data.fluxTemp.stor.flux,data.fluxTemp.turb.flux, # Temp fluxes,
            data.fluxMome.turb.veloFric) %>% # u*
-    rename(nee=data.fluxCo2.nsae.flux,lhf=data.fluxH2o.nsae.flux,
+    dplyr::rename(nee=data.fluxCo2.nsae.flux,lhf=data.fluxH2o.nsae.flux,
            shf=data.fluxTemp.nsae.flux,ustar=data.fluxMome.turb.veloFric,
            Fc=data.fluxCo2.turb.flux,Fw=data.fluxH2o.turb.flux,
            Ft=data.fluxTemp.turb.flux,Sc=data.fluxCo2.stor.flux,
@@ -74,7 +76,7 @@ extract_NEON_PMvars <- function(neon.site,
   
   # cut down further if not expanded
     fluxes.reduced <- fluxes.reduced %>%
-      select(timeBgn,timeEnd,nee,lhf,shf,ustar)
+      dplyr::select(timeBgn,timeEnd,nee,lhf,shf,ustar)
   
   # convert "NEON" time to POSIXct
   fluxes.reduced$timeBgn <- as.POSIXct(fluxes.reduced$timeBgn,format="%Y-%m-%dT%H:%M:%S.%OSZ",tz="UTC")
@@ -82,15 +84,15 @@ extract_NEON_PMvars <- function(neon.site,
 
   # convert fluxes to xts. 
   fluxes.notime <- fluxes.reduced %>%
-    select(-timeBgn,timeEnd)
+    dplyr::select(-timeBgn,timeEnd)
   
-  flux.xts <- as.xts(fluxes.notime,order.by=fluxes.reduced$timeBgn)
+  flux.xts <- xts::as.xts(fluxes.notime,order.by=fluxes.reduced$timeBgn)
   
   # get lat/lon and timezone of station.
   slist <- list.files(path=paste0(flux.path,"/",neon.site,"/"),pattern=".h5",
                       full.names=TRUE,recursive=TRUE)
   
-  attrs <- h5readAttributes(slist[[1]],neon.site)
+  attrs <- rhdf5::h5readAttributes(slist[[1]],neon.site)
   
   lat <- as.numeric(attrs$LatTow)
   lon <- as.numeric(attrs$LonTow)
@@ -102,13 +104,13 @@ extract_NEON_PMvars <- function(neon.site,
   
   # simplify h2o profile
   h2oprof <- h2oprof.tmp[[1]] %>%
-    select(verticalPosition,timeBgn,data.h2oStor.rtioMoleWetH2o.mean) %>%
-    rename(h2o = data.h2oStor.rtioMoleWetH2o.mean,time = timeBgn) %>%
-    mutate(verticalPosition = as.numeric(verticalPosition)/10) %>%
-    filter(!is.na(verticalPosition)) %>%
-    mutate(height = hgts[verticalPosition]) %>%
-    select(-verticalPosition) %>%
-    pivot_wider(names_from=height,
+    dplyr::select(verticalPosition,timeBgn,data.h2oStor.rtioMoleWetH2o.mean) %>%
+    dplyr::rename(h2o = data.h2oStor.rtioMoleWetH2o.mean,time = timeBgn) %>%
+    dplyr::mutate(verticalPosition = as.numeric(verticalPosition)/10) %>%
+    dplyr::filter(!is.na(verticalPosition)) %>%
+    dplyr::mutate(height = hgts[verticalPosition]) %>%
+    dplyr::select(-verticalPosition) %>%
+    tidyr::pivot_wider(names_from=height,
                 names_prefix="H2O_",
                 names_sep="_",
                 values_from=h2o)
@@ -120,13 +122,13 @@ extract_NEON_PMvars <- function(neon.site,
   
   # simplify co2 profile
   co2prof <- co2prof.tmp[[1]] %>%
-    select(verticalPosition,timeBgn,data.co2Stor.rtioMoleDryCo2.mean) %>%
-    rename(co2 = data.co2Stor.rtioMoleDryCo2.mean, time = timeBgn) %>%
-    mutate(verticalPosition = as.numeric(verticalPosition)/10) %>%
-    filter(!is.na(verticalPosition)) %>%
-    mutate(height = hgts[verticalPosition]) %>%
-    select(-verticalPosition) %>%
-    pivot_wider(names_from=height,
+    dplyr::select(verticalPosition,timeBgn,data.co2Stor.rtioMoleDryCo2.mean) %>%
+    dplyr::rename(co2 = data.co2Stor.rtioMoleDryCo2.mean, time = timeBgn) %>%
+    dplyr::mutate(verticalPosition = as.numeric(verticalPosition)/10) %>%
+    dplyr::filter(!is.na(verticalPosition)) %>%
+    dplyr::mutate(height = hgts[verticalPosition]) %>%
+    dplyr::select(-verticalPosition) %>%
+    tidyr::pivot_wider(names_from=height,
                 names_prefix="CO2_",
                 values_from=co2)
   
@@ -136,13 +138,13 @@ extract_NEON_PMvars <- function(neon.site,
   sonicT.tmp <- neonUtilities::stackEddy(paste0(flux.path,"/",neon.site),level="dp01",avg=30,var="tempAir")
   
   sonicprof <- sonicT.tmp[[1]] %>%
-    select(verticalPosition,timeBgn,data.soni.tempAir.mean) %>%
-    rename(sonT = data.soni.tempAir.mean, time = timeBgn) %>%
-    mutate(verticalPosition = as.numeric(verticalPosition)/10) %>%
-    filter(!is.na(verticalPosition)) %>%
-    mutate(height = hgts[verticalPosition]) %>%
-    select(-verticalPosition) %>%
-    pivot_wider(names_from=height,
+    dplyr::select(verticalPosition,timeBgn,data.soni.tempAir.mean) %>%
+    dplyr::rename(sonT = data.soni.tempAir.mean, time = timeBgn) %>%
+    dplyr::mutate(verticalPosition = as.numeric(verticalPosition)/10) %>%
+    dplyr::filter(!is.na(verticalPosition)) %>%
+    dplyr::mutate(height = hgts[verticalPosition]) %>%
+    dplyr::select(-verticalPosition) %>%
+    tidyr::pivot_wider(names_from=height,
                 names_prefix="sonT_",
                 values_from=sonT)
   
@@ -177,58 +179,60 @@ extract_NEON_PMvars <- function(neon.site,
   #------------------------------------
   # relative humidity
   Rh1 <- Rh.tmp$RH_30min %>% 
-    select(RHMean,startDateTime,horizontalPosition,verticalPosition) %>%
-    mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
-    select(-horizontalPosition,-verticalPosition)
+    dplyr::select(RHMean,startDateTime,horizontalPosition,verticalPosition) %>%
+    dplyr::mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
+    dplyr::select(-horizontalPosition,-verticalPosition)
   Rh2 <- Rh.tmp$sensor_positions_00098 %>%
-    select(HOR.VER,xOffset,yOffset,zOffset)
+    dplyr::select(HOR.VER,xOffset,yOffset,zOffset)
   
-  Rh <- left_join(Rh1,Rh2,by="HOR.VER") %>%
-    mutate(dist.from.tower = sqrt(xOffset^2 + yOffset^2)) %>%
-    filter(dist.from.tower < 30) %>%
-    select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
-    rename(time = startDateTime) %>%
-    pivot_wider(names_from=zOffset,
+  Rh <- dplyr::left_join(Rh1,Rh2,by="HOR.VER") %>%
+    dplyr::mutate(dist.from.tower = sqrt(xOffset^2 + yOffset^2)) %>%
+    dplyr::filter(dist.from.tower < 30) %>%
+    dplyr::select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
+    dplyr::rename(time = startDateTime) %>%
+    tidyr::pivot_wider(names_from=zOffset,
                 names_prefix="RH",
                 names_sep="_",
-                values_from=RHMean)
+                values_from=RHMean,
+                values_fn = list(RHMean = first)) # where there are duplicates, take first value only.
   
   rm(Rh1, Rh2, Rh.tmp)
   
   # single-aspirated air temperature
   Tsing1 <- Tsing.tmp$SAAT_30min %>%
-    select(tempSingleMean,startDateTime,horizontalPosition,verticalPosition) %>%
-    mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
-    select(-horizontalPosition,-verticalPosition)
+    dplyr::select(tempSingleMean,startDateTime,horizontalPosition,verticalPosition) %>%
+    dplyr::mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
+    dplyr::select(-horizontalPosition,-verticalPosition)
   Tsing2 <- Tsing.tmp$sensor_positions_00002 %>%
-    select(HOR.VER,xOffset,yOffset,zOffset)
+    dplyr::select(HOR.VER,xOffset,yOffset,zOffset)
   
-  Tsing <- left_join(Tsing1,Tsing2,by="HOR.VER") %>%
-    mutate(dist.from.tower = sqrt(xOffset^2 + yOffset^2)) %>%
-    filter(dist.from.tower < 30) %>%
-    select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
-    rename(time = startDateTime) %>%
-    pivot_wider(names_from=zOffset,
+  Tsing <- dplyr::left_join(Tsing1,Tsing2,by="HOR.VER") %>%
+    dplyr::mutate(dist.from.tower = sqrt(xOffset^2 + yOffset^2)) %>%
+    dplyr::filter(dist.from.tower < 30) %>%
+    dplyr::select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
+    dplyr::rename(time = startDateTime) %>%
+    tidyr::pivot_wider(names_from=zOffset,
                 names_prefix="singTemp",
                 names_sep="_",
-                values_from=tempSingleMean)
+                values_from=tempSingleMean,
+                values_fn = list(tempSingleMean = first))
   
   rm(Tsing1, Tsing2, Tsing.tmp)
   
   # triple-aspirated air temperature
   Ttrip1 <- Ttrip.tmp$TAAT_30min %>%
-    select(tempTripleMean,startDateTime,horizontalPosition,verticalPosition) %>%
-    mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
-    select(-horizontalPosition,-verticalPosition)
+    dplyr::select(tempTripleMean,startDateTime,horizontalPosition,verticalPosition) %>%
+    dplyr::mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
+    dplyr::select(-horizontalPosition,-verticalPosition)
   Ttrip2 <- Ttrip.tmp$sensor_positions_00003 %>%
-    select(HOR.VER,xOffset,yOffset,zOffset)
+    dplyr::select(HOR.VER,xOffset,yOffset,zOffset)
   
-  Ttrip <- left_join(Ttrip1,Ttrip2,by="HOR.VER") %>%
-    mutate(dist.from.tower = sqrt(xOffset^2 + yOffset^2)) %>%
-    filter(dist.from.tower < 30) %>%
-    select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
-    rename(time = startDateTime) %>%
-    pivot_wider(names_from=zOffset,
+  Ttrip <- dplyr::left_join(Ttrip1,Ttrip2,by="HOR.VER") %>%
+    dplyr::mutate(dist.from.tower = sqrt(xOffset^2 + yOffset^2)) %>%
+    dplyr::filter(dist.from.tower < 30) %>%
+    dplyr::select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
+    dplyr::rename(time = startDateTime) %>%
+    tidyr::pivot_wider(names_from=zOffset,
                 names_prefix="tripTemp",
                 names_sep="_",
                 values_from=tempTripleMean)
@@ -237,18 +241,18 @@ extract_NEON_PMvars <- function(neon.site,
   
   # barometric pressure
   bp1 <- bp.tmp$BP_30min %>%
-    select(staPresMean,startDateTime,horizontalPosition,verticalPosition) %>%
-    mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
-    select(-horizontalPosition,-verticalPosition)
+    dplyr::select(staPresMean,startDateTime,horizontalPosition,verticalPosition) %>%
+    dplyr::mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
+    dplyr::select(-horizontalPosition,-verticalPosition)
   bp2 <- bp.tmp$sensor_positions_00004 %>%
-    select(HOR.VER,xOffset,yOffset,zOffset)
+    dplyr::select(HOR.VER,xOffset,yOffset,zOffset)
   
-  bp <- left_join(bp1,bp2,by="HOR.VER") %>%
-    mutate(dist.from.tower = sqrt(xOffset^2 + yOffset^2)) %>%
-    filter(dist.from.tower < 30) %>%
-    select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
-    rename(time = startDateTime) %>%
-    pivot_wider(names_from=zOffset,
+  bp <- dplyr::left_join(bp1,bp2,by="HOR.VER") %>%
+    dplyr::mutate(dist.from.tower = sqrt(xOffset^2 + yOffset^2)) %>%
+    dplyr::filter(dist.from.tower < 30) %>%
+    dplyr::select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
+    dplyr::rename(time = startDateTime) %>%
+    tidyr::pivot_wider(names_from=zOffset,
                 names_prefix="pres",
                 names_sep="_",
                 values_from=staPresMean)
@@ -257,80 +261,85 @@ extract_NEON_PMvars <- function(neon.site,
   
   # wind speed
   ws1 <- ws.tmp$`2DWSD_30min` %>%
-    select(windSpeedMean,startDateTime,horizontalPosition,verticalPosition) %>%
-    mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
-    select(-horizontalPosition,-verticalPosition)
+    dplyr::select(windSpeedMean,startDateTime,horizontalPosition,verticalPosition) %>%
+    dplyr::mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
+    dplyr::select(-horizontalPosition,-verticalPosition)
   ws2 <- ws.tmp$sensor_positions_00001 %>%
-    select(HOR.VER,xOffset,yOffset,zOffset)
+    dplyr::select(HOR.VER,xOffset,yOffset,zOffset)
   
-  ws <- left_join(ws1,ws2,by="HOR.VER") %>%
-    mutate(dist.from.tower = sqrt(xOffset^2 + yOffset^2)) %>%
-    filter(dist.from.tower < 30) %>%
-    select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
-    rename(time = startDateTime) %>%
-    pivot_wider(names_from=zOffset,
+  ws <- dplyr::left_join(ws1,ws2,by="HOR.VER") %>%
+    dplyr::mutate(dist.from.tower = sqrt(xOffset^2 + yOffset^2)) %>%
+    dplyr::filter(dist.from.tower < 30) %>%
+    dplyr::select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
+    dplyr::rename(time = startDateTime) %>%
+    tidyr::pivot_wider(names_from=zOffset,
                 names_prefix="ws",
                 names_sep="_",
-                values_from=windSpeedMean)
+                values_from=windSpeedMean,
+                values_fn = list(windSpeedMean = first))
   
   rm(ws1, ws2, ws.tmp)
   
   # radiation terms
   Rg1 <- Rg.tmp$SLRNR_30min %>%
-    select(startDateTime,horizontalPosition,verticalPosition,inSWMean,outSWMean,outLWMean,inLWMean) %>%
-    mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
-    select(-horizontalPosition,-verticalPosition)
+    dplyr::select(startDateTime,horizontalPosition,verticalPosition,inSWMean,outSWMean,outLWMean,inLWMean) %>%
+    dplyr::mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
+    dplyr::select(-horizontalPosition,-verticalPosition)
   Rg2 <- Rg.tmp$sensor_positions_00023 %>%
-    select(HOR.VER,xOffset,yOffset,zOffset)
+    dplyr::select(HOR.VER,xOffset,yOffset,zOffset)
   
-  Rg <- left_join(Rg1,Rg2,by="HOR.VER") %>%
-    mutate(dist.from.tower = sqrt(xOffset^2 + yOffset^2)) %>%
-    filter(dist.from.tower < 30) %>%
-    select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
-    mutate(Rnet = (inSWMean + inLWMean) - (outSWMean + outLWMean)) %>%
-    rename(inSW = inSWMean, inLW = inLWMean, outSW = outSWMean, outLW = outLWMean, time = startDateTime) %>%
-    pivot_wider(names_from=zOffset,
-                values_from=c(inSW,inLW,outSW,outLW,Rnet))
+  Rg <- dplyr::left_join(Rg1,Rg2,by="HOR.VER") %>%
+    dplyr::mutate(dist.from.tower = sqrt(xOffset^2 + yOffset^2)) %>%
+    dplyr::filter(dist.from.tower < 30) %>%
+    dplyr::select(-HOR.VER,-xOffset,-yOffset,-dist.from.tower) %>%
+    dplyr::mutate(Rnet = (inSWMean + inLWMean) - (outSWMean + outLWMean)) %>%
+    dplyr::rename(inSW = inSWMean, inLW = inLWMean, outSW = outSWMean, outLW = outLWMean, time = startDateTime) %>%
+    tidyr::pivot_wider(names_from=zOffset,
+                values_from=c(inSW,inLW,outSW,outLW,Rnet),
+                values_fn = list(inSW = first, inLW = first,
+                                 outSW = first, outLW = first,
+                                 Rnet = first)) # where there are duplicates, take first value only.
   
   rm(Rg1,Rg2,Rg.tmp)
   
   # soil heat flux
   soihf1 <- soihf.tmp$SHF_30min %>%
-    select(startDateTime,horizontalPosition,verticalPosition,SHFMean) %>%
-    mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
-    select(-horizontalPosition,-verticalPosition)
+    dplyr::select(startDateTime,horizontalPosition,verticalPosition,SHFMean) %>%
+    dplyr::mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
+    dplyr::select(-horizontalPosition,-verticalPosition)
   soihf2 <- soihf.tmp$sensor_positions_00040 %>%
-    select(HOR.VER,xOffset,yOffset,zOffset)
+    dplyr::select(HOR.VER,xOffset,yOffset,zOffset)
   
-  soihf <- left_join(soihf1,soihf2,by="HOR.VER") %>%
-    mutate(dist.from.tower = round(sqrt(xOffset^2 + yOffset^2),3)) %>%
-    filter(dist.from.tower < 30) %>%
-    filter(zOffset == -0.08) %>%
-    select(-xOffset,-yOffset,-zOffset,-dist.from.tower) %>%
-    rename(time = startDateTime) %>%
-    pivot_wider(names_prefix="SHF",
+  soihf <- dplyr::left_join(soihf1,soihf2,by="HOR.VER") %>%
+    dplyr::mutate(dist.from.tower = round(sqrt(xOffset^2 + yOffset^2),3)) %>%
+    dplyr::filter(dist.from.tower < 30) %>%
+    dplyr::filter(zOffset == -0.08) %>%
+    dplyr::select(-xOffset,-yOffset,-zOffset,-dist.from.tower) %>%
+    dplyr::rename(time = startDateTime) %>%
+    tidyr::pivot_wider(names_prefix="SHF",
                 names_from=HOR.VER,
-                values_from=SHFMean)
+                values_from=SHFMean,
+                values_fn = list(SHFMean = first))
   
   rm(soihf1,soihf2,soihf.tmp)
   
   # precipitation amounts
-  prec1 <- prec.tmp$PRIPRE_30min %>%
-    select(startDateTime,horizontalPosition,verticalPosition,priPrecipBulk) %>%
-    mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
-    select(-horizontalPosition,-verticalPosition)
+  prec1 <- prec.tmp$SECPRE_30min %>%
+    dplyr::select(startDateTime,horizontalPosition,verticalPosition,secPrecipBulk) %>%
+    dplyr::mutate(HOR.VER = paste(horizontalPosition,verticalPosition,sep=".")) %>%
+    dplyr::select(-horizontalPosition,-verticalPosition)
   prec2 <- prec.tmp$sensor_positions_00006 %>%
-    select(HOR.VER,xOffset,yOffset,zOffset)  
+    dplyr::select(HOR.VER,xOffset,yOffset,zOffset)  
   
-  prec <- left_join(prec1,prec2,by="HOR.VER") %>%
-    mutate(dist.from.tower = round(sqrt(xOffset^2 + yOffset^2),3)) %>%
-    filter(dist.from.tower < 30) %>%
-    select(-HOR.VER,-xOffset,-yOffset,-zOffset) %>%
-    rename(time = startDateTime) %>%
-    pivot_wider(names_from=dist.from.tower,
+  prec <- dplyr::left_join(prec1,prec2,by="HOR.VER") %>%
+    dplyr::mutate(dist.from.tower = round(sqrt(xOffset^2 + yOffset^2),3)) %>%
+    dplyr::filter(dist.from.tower < 30) %>%
+    dplyr::select(-HOR.VER,-xOffset,-yOffset,-zOffset) %>%
+    dplyr::rename(time = startDateTime) %>%
+    tidyr::pivot_wider(names_from=dist.from.tower,
                 names_prefix="Precip",
                 names_sep="_",
-                values_from=priPrecipBulk)
+                values_from=secPrecipBulk)
   
   rm(prec.tmp,prec1,prec2)
   
@@ -345,38 +354,38 @@ extract_NEON_PMvars <- function(neon.site,
   prec$time <- as.POSIXct(prec$time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC")
 
   # convert data to xts objects and then merge.
-  Rg.xts <- xts(Rg[,2:ncol(Rg)],order.by=Rg$time)
-  Rh.xts <- xts(Rh[,2:ncol(Rh)],order.by=Rh$time)
-  ws.xts <- xts(ws[,2:ncol(ws)],order.by=ws$time)
-  bp.xts <- xts(bp[,2:ncol(bp)],order.by=bp$time)
-  Ttrip.xts <- xts(Ttrip[,2:ncol(Ttrip)],order.by=Ttrip$time)
-  Tsing.xts <- xts(Tsing[,2:ncol(Tsing)],order.by=Tsing$time)
-  soihf.xts <- xts(soihf[,2:ncol(soihf)],order.by=soihf$time)
-  prec.xts <- xts(prec[,2:ncol(prec)],order.by=prec$time)
-  h2oprof.xts <- xts(h2oprof[,2:ncol(h2oprof)],order.by=h2oprof$time)
-  co2prof.xts <- xts(co2prof[,2:ncol(co2prof)],order.by=co2prof$time)
-  sonicprof.xts <- xts(sonicprof[,2:ncol(sonicprof)],order.by=sonicprof$time)
+  Rg.xts <- xts::xts(Rg[,2:ncol(Rg)],order.by=Rg$time)
+  Rh.xts <- xts::xts(Rh[,2:ncol(Rh)],order.by=Rh$time)
+  ws.xts <- xts::xts(ws[,2:ncol(ws)],order.by=ws$time)
+  bp.xts <- xts::xts(bp[,2:ncol(bp)],order.by=bp$time)
+  Ttrip.xts <- xts::xts(Ttrip[,2:ncol(Ttrip)],order.by=Ttrip$time)
+  Tsing.xts <- xts::xts(Tsing[,2:ncol(Tsing)],order.by=Tsing$time)
+  soihf.xts <- xts::xts(soihf[,2:ncol(soihf)],order.by=soihf$time)
+  prec.xts <- xts::xts(prec[,2:ncol(prec)],order.by=prec$time)
+  h2oprof.xts <- xts::xts(h2oprof[,2:ncol(h2oprof)],order.by=h2oprof$time)
+  co2prof.xts <- xts::xts(co2prof[,2:ncol(co2prof)],order.by=co2prof$time)
+  sonicprof.xts <- xts::xts(sonicprof[,2:ncol(sonicprof)],order.by=sonicprof$time)
 
-  minTime <- as.POSIXct(min(c(min(index(Rg.xts)),min(index(Rh.xts)),
-                              min(index(Ttrip.xts)),min(index(flux.xts)),
-                              min(index(bp.xts)),min(index(ws.xts)),
-                              min(index(Tsing.xts)),min(index(soihf.xts)),
-                              min(index(sonicprof.xts)),min(index(prec.xts)),
-                              min(index(h2oprof.xts)),min(index(co2prof.xts)))))
+  minTime <- as.POSIXct(min(c(min(zoo::index(Rg.xts)),min(zoo::index(Rh.xts)),
+                              min(zoo::index(Ttrip.xts)),min(zoo::index(flux.xts)),
+                              min(zoo::index(bp.xts)),min(zoo::index(ws.xts)),
+                              min(zoo::index(Tsing.xts)),min(zoo::index(soihf.xts)),
+                              min(zoo::index(sonicprof.xts)),min(zoo::index(prec.xts)),
+                              min(zoo::index(h2oprof.xts)),min(zoo::index(co2prof.xts)))))
   
-  maxTime <- as.POSIXct(max(c(max(index(Rg.xts)),max(index(Rh.xts)),
-                              max(index(Ttrip.xts)),max(index(flux.xts)),
-                              max(index(bp.xts)),max(index(ws.xts)),
-                              max(index(Tsing.xts)),max(index(soihf.xts)),
-                              max(index(sonicprof.xts)),max(index(prec.xts)),
-                              max(index(h2oprof.xts)),max(index(co2prof.xts)))))
+  maxTime <- as.POSIXct(max(c(max(zoo::index(Rg.xts)),max(zoo::index(Rh.xts)),
+                              max(zoo::index(Ttrip.xts)),max(zoo::index(flux.xts)),
+                              max(zoo::index(bp.xts)),max(zoo::index(ws.xts)),
+                              max(zoo::index(Tsing.xts)),max(zoo::index(soihf.xts)),
+                              max(zoo::index(sonicprof.xts)),max(zoo::index(prec.xts)),
+                              max(zoo::index(h2oprof.xts)),max(zoo::index(co2prof.xts)))))
   
   dummy.ts <- seq.POSIXt(minTime,maxTime,by=1800)
   dummy.data <- rep(NA,length(dummy.ts))
   
-  dummy.xts <- xts(dummy.data,order.by=dummy.ts)
+  dummy.xts <- xts::xts(dummy.data,order.by=dummy.ts)
   
-  all.data <- merge.xts(dummy.xts,Rg.xts,Rh.xts,Tsing.xts,Ttrip.xts,sonicprof.xts,
+  all.data <- xts::merge.xts(dummy.xts,Rg.xts,Rh.xts,Tsing.xts,Ttrip.xts,sonicprof.xts,
                         bp.xts,ws.xts,flux.xts,soihf.xts,prec.xts,
                         h2oprof.xts,co2prof.xts)
 
@@ -386,18 +395,18 @@ extract_NEON_PMvars <- function(neon.site,
   }
   
   if (tzone == "PST") {
-    tzone(all.data) <- "Etc/GMT+8"  
+    xts::tzone(all.data) <- "Etc/GMT+8"  
   } else if (tzone == "MST") {
-    tzone(all.data) <- "Etc/GMT+7"
+    xts::tzone(all.data) <- "Etc/GMT+7"
   } else if (tzone == "CST") {
-    tzone(all.data) <- "Etc/GMT+6" 
+    xts::tzone(all.data) <- "Etc/GMT+6" 
   } else if (tzone == "EST") {
-    tzone(all.data) <- "Etc/GMT+5"
+    xts::tzone(all.data) <- "Etc/GMT+5"
   }
   
-  data.out <- data.frame(time=index(all.data),coredata(all.data)) %>%
-    select(-timeEnd,-dummy.xts) %>%
-    rename(H = shf)
+  data.out <- data.frame(time=zoo::index(all.data),zoo::coredata(all.data)) %>%
+    dplyr::select(-timeEnd,-dummy.xts) %>%
+    dplyr::rename(H = shf)
   
    #------------------------------------------------------------
   
@@ -406,7 +415,7 @@ extract_NEON_PMvars <- function(neon.site,
     #---------------- Filter NEE ----------------
     # put in median deviation filter from Brock 86 / Starkenburg 2016.
     
-    NEE.filt <- rollapply(data.out$nee,7,median,na.rm=TRUE,fill=NA)
+    NEE.filt <- zoo::rollapply(data.out$nee,7,median,na.rm=TRUE,fill=NA)
     NEE.logi <- abs(data.out$nee - NEE.filt) > 10
     
     data.out$nee[NEE.logi == TRUE] <- NA
